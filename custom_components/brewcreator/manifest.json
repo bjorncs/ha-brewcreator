@@ -1,0 +1,12 @@
+{
+  "domain": "brewcreator",
+  "name": "BrewCreator",
+  "codeowners": [
+    "@bjorncs"
+  ],
+  "integration_type": "hub",
+  "config_flow": true,
+  "documentation": "https://github.com/bjorncs/ha-brewcreator",
+  "iot_class": "cloud_push",
+  "version": "0.1.0"
+}
