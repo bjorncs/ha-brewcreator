@@ -2,7 +2,7 @@
 Monitor and control your devices in [BrewCreator](https://www.brewolution.com/brewcreator-eng) such as
 [Ferminator Connect](https://www.brewolution.com/ferminator-connect.html) through Home Assistant.
 
-<img src="assets/images/ferminator-climate-entity.png" alt="BrewCreator" width="400">
+![BrewCreator](assets/images/ferminator-climate-entity.png)
 
 ## Installation
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
