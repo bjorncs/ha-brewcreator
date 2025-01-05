@@ -4,12 +4,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from custom_components.brewcreator import BrewCreatorEquipment, BrewCreatorAPI, DOMAIN
+from .api import BrewCreatorAPI, BrewCreatorEquipment
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[dict[str, BrewCreatorEquipment]]):
+class BrewCreatorDataUpdateCoordinator(
+    DataUpdateCoordinator[dict[str, BrewCreatorEquipment]]
+):
     """Coordinator for updating data from BrewCreator API."""
 
     def __init__(

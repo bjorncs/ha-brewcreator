@@ -1,20 +1,21 @@
 import logging
 
-from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature
-from homeassistant.components.climate.const import HVACAction, HVACMode
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACAction,
+    HVACMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import BrewCreatorDataUpdateCoordinator
-from custom_components.brewcreator.api import (
-    FerminatorMode,
-    Ferminator,
-)
+from .api import Ferminator, FerminatorMode
 from .const import DOMAIN
+from .device import ferminator_device_info
 
 FAN_SPEEDS = {1: "Low", 2: "Medium", 3: "High", 4: "Max"}
 MODE_TO_HVAC_ACTION = {
@@ -57,15 +58,7 @@ class FerminatorConnectClimate(CoordinatorEntity, ClimateEntity):
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_min_temp = 0
         self._attr_max_temp = 50
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self.__ferminator().serial_number)},
-            manufacturer="Brewolution",
-            serial_number=self.__ferminator().serial_number,
-            model=self.__ferminator().equipment_type.value,
-            name=self.__ferminator().name,
-            sw_version=self.__ferminator().sw_version,
-            hw_version=self.__ferminator().hw_version,
-        )
+        self._attr_device_info = ferminator_device_info(self.__ferminator())
 
     @property
     def current_temperature(self) -> float | None:
@@ -90,6 +83,10 @@ class FerminatorConnectClimate(CoordinatorEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         return FAN_SPEEDS.get(self.__ferminator().fan_speed)
+
+    @property
+    def available(self) -> bool:
+        return self.__ferminator().is_active
 
     async def async_turn_on(self) -> None:
         await self.async_set_hvac_mode(HVACMode.HEAT_COOL)

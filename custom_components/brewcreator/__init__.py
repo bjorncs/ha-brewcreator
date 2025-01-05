@@ -9,11 +9,10 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from custom_components.brewcreator.api import BrewCreatorAPI, BrewCreatorEquipment
-from .const import DOMAIN
+from .api import BrewCreatorAPI
 from .coordinator import BrewCreatorDataUpdateCoordinator
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR]
 
 _LOGGER = logging.getLogger(__name__)
 
