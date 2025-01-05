@@ -1,9 +1,10 @@
 from abc import ABC
 import asyncio
-import base64
 from asyncio import Task
+import base64
 from collections.abc import Awaitable, Callable
 import contextlib
+from datetime import datetime
 from enum import Enum
 import hashlib
 import logging
@@ -84,6 +85,14 @@ class BrewCreatorEquipment(ABC):
         return self._json["name"]
 
     @property
+    def is_active(self) -> bool:
+        return self._json["isActive"]
+
+    @property
+    def last_activity_time(self) -> datetime:
+        return datetime.fromisoformat(self._json["lastActivityTime"])
+
+    @property
     def json(self) -> dict[str, any]:
         return self._json
 
@@ -159,7 +168,9 @@ class Ferminator(BrewCreatorEquipment):
         return await self._update_equipment({"isRegulatingTemperature": is_regulating})
 
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
-        self._connected_equipment_list = [e for e in equipment if e.id in self._json["connectedEquipments"]]
+        self._connected_equipment_list = [
+            e for e in equipment if e.id in self._json["connectedEquipments"]
+        ]
 
 
 class Tilt(BrewCreatorEquipment):
@@ -205,19 +216,19 @@ class BrewCreatorAPI:
 
     async def list_equipment(self) -> dict[str, BrewCreatorEquipment]:
         data = await self.equipment_json()
-        equipment_list = [e for e in [self.__create_equipment(e) for e in data["data"] if e is not None]]
+        equipment_list = [
+            e
+            for e in [self.__create_equipment(e) for e in data["data"] if e is not None]
+        ]
         for e in filter(lambda x: isinstance(x, Ferminator), equipment_list):
             e._update_connected_equipment(equipment_list)
-        return {
-            e.id: e
-            for e in equipment_list
-        }
+        return {e.id: e for e in equipment_list}
 
     async def equipment_json(self) -> Any:
         await self.reauthenticate()
         async with self.__session.get(
-                "https://api.brewcreator.com/api/v1.0/equipments?PageSize=100&PageNumber=1&Logic=And&Filters=&Sorts=",
-                headers=self.__get_headers(),
+            "https://api.brewcreator.com/api/v1.0/equipments?PageSize=100&PageNumber=1&Logic=And&Filters=&Sorts=",
+            headers=self.__get_headers(),
         ) as response:
             data = await response.json()
             _LOGGER.debug("Equipment JSON: %s", data)
@@ -292,19 +303,27 @@ class BrewCreatorAPI:
     async def __websocket_connect_and_listen(self):
         await self.reauthenticate()
         async with self.__session.post(
-                "https://api.brewcreator.com/telemetry/negotiate?negotiateVersion=1",
-                headers=self.__get_headers(),
+            "https://api.brewcreator.com/telemetry/negotiate?negotiateVersion=1",
+            headers=self.__get_headers(),
         ) as response:
             connection_token = (await response.json())["connectionToken"]
         wss_host = "wss://api.brewcreator.com"
         url = f"{wss_host}/telemetry?id={connection_token}&access_token={self.__access_token}"
-        async with self.__session.ws_connect(url, autoclose=True, autoping=True, heartbeat=10, timeout=30,
-                                             receive_timeout=None) as ws:
+        async with self.__session.ws_connect(
+            url,
+            autoclose=True,
+            autoping=True,
+            heartbeat=10,
+            timeout=30,
+            receive_timeout=None,
+        ) as ws:
             await ws.send_str('{"protocol":"json","version":1}')
             handshake_response = await ws.receive()
-            if handshake_response.data != '{}':
-                _LOGGER.warning("Unexpected handshake response: '%s'. Connection will likely be closed by server",
-                                handshake_response.data)
+            if handshake_response.data != "{}":
+                _LOGGER.warning(
+                    "Unexpected handshake response: '%s'. Connection will likely be closed by server",
+                    handshake_response.data,
+                )
             else:
                 await ws.send_str(
                     '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
@@ -314,9 +333,11 @@ class BrewCreatorAPI:
             if self.__websocket_ping_task is not None:
                 self.__websocket_ping_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await self.__websocket_task
+                    await self.__websocket_ping_task
                 self.__websocket_ping_task = None
-            self.__websocket_ping_task = asyncio.create_task(self.__websocket_signalr_ping(ws))
+            self.__websocket_ping_task = asyncio.create_task(
+                self.__websocket_signalr_ping(ws)
+            )
             async for msg in ws:  # type: aiohttp.WSMessage
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     if msg.data == '{"type":6}':
@@ -326,9 +347,7 @@ class BrewCreatorAPI:
                             "Received a message that will trigger a state update: %s",
                             msg.data,
                         )
-                        await self.__update_callback(
-                            await self.list_equipment()
-                        )
+                        await self.__update_callback(await self.list_equipment())
                     else:
                         _LOGGER.debug("Received unexpected message: %s", msg.data)
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
@@ -343,9 +362,7 @@ class BrewCreatorAPI:
                     await asyncio.sleep(60)
                     return
                 else:
-                    _LOGGER.error(
-                        "Unexpected WebSocket message type: %s", msg.type
-                    )
+                    _LOGGER.error("Unexpected WebSocket message type: %s", msg.type)
 
     async def __websocket_signalr_ping(self, ws: aiohttp.ClientWebSocketResponse):
         while True:
