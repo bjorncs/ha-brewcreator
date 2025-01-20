@@ -10,12 +10,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import BrewCreatorDataUpdateCoordinator
 from .api import Ferminator, FerminatorMode
-from .const import DOMAIN
-from .device import ferminator_device_info
+from .entity import FerminatorEntity, register_ferminator_entities
 
 FAN_SPEEDS = {1: "Low", 2: "Medium", 3: "High", 4: "Max"}
 MODE_TO_HVAC_ACTION = {
@@ -33,20 +31,16 @@ async def async_setup_entry(
     entry: ConfigEntry[BrewCreatorDataUpdateCoordinator],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data
-    for equipment in coordinator.data.values():
-        if isinstance(equipment, Ferminator):
-            async_add_entities(
-                [FerminatorConnectClimate(coordinator, equipment.id)], True
-            )
+    register_ferminator_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, id: [FerminatorConnectClimate(coordinator, id)],
+    )
 
 
-class FerminatorConnectClimate(CoordinatorEntity, ClimateEntity):
+class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
-        super().__init__(coordinator)
-        self._brewcreator_id = id
-        self._attr_unique_id = f"{DOMAIN}_{id}"
-        self._attr_name = self.__ferminator().name
+        super().__init__(coordinator, id, "Temperature Control", "")
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.FAN_MODE
@@ -58,7 +52,6 @@ class FerminatorConnectClimate(CoordinatorEntity, ClimateEntity):
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_min_temp = 0
         self._attr_max_temp = 50
-        self._attr_device_info = ferminator_device_info(self.__ferminator())
 
     @property
     def current_temperature(self) -> float | None:
@@ -86,7 +79,7 @@ class FerminatorConnectClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def available(self) -> bool:
-        return self.__ferminator().is_active
+        return self.__ferminator().is_connected
 
     async def async_turn_on(self) -> None:
         await self.async_set_hvac_mode(HVACMode.HEAT_COOL)

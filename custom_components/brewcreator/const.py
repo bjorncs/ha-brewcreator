@@ -1,1 +1,12 @@
 DOMAIN = "brewcreator"
+
+CONF_BATCH_INFO_BEER_STYLE = "batch_info_beer_style"
+CONF_BATCH_INFO_BREW_NAME = "batch_info_brew_name"
+CONF_BATCH_INFO_EBC = "batch_info_ebc"
+CONF_BATCH_INFO_FERMENTATION_TYPE = "batch_info_fermentation_type"
+CONF_BATCH_INFO_FG = "batch_info_fg"
+CONF_BATCH_INFO_IBU = "batch_info_ibu"
+CONF_BATCH_INFO_OG = "batch_info_og"
+CONF_BATCH_INFO_OWNER = "batch_info_owner"
+CONF_BATCH_INFO_STARTED = "batch_info_started"
+CONF_BATCH_INFO_VOLUME = "batch_info_volume"

@@ -46,6 +46,59 @@ class TiltColor(Enum):
     BLACK = "TiltBlack"
 
 
+class FermentationType(Enum):
+    TOP = "Top"
+    BOTTOM = "Bottom"
+
+
+class BatchInfo:
+    def __init__(self, json: dict[str, any]) -> None:
+        self._json = json
+
+    @property
+    def brew_name(self) -> str:
+        return self._json.get("brewName")
+
+    @property
+    def brew_date(self) -> datetime | None:
+        str_date = self._json.get("brewDate")
+        if str_date is None:
+            return None
+        return datetime.fromisoformat(str_date)
+
+    @property
+    def owner(self) -> str:
+        return self._json.get("owner")
+
+    @property
+    def ebc(self) -> float:
+        return self._json.get("ebc")
+
+    @property
+    def ibu(self) -> float:
+        return self._json.get("ibu")
+
+    @property
+    def volume(self) -> float:
+        return self._json.get("volume")
+
+    @property
+    def fermentation_type(self) -> FermentationType:
+        return FermentationType(self._json.get("fermented"))
+
+    @property
+    def og(self) -> float:
+        return self._json.get("og")
+
+    @property
+    def fg(self) -> float:
+        return self._json.get("fg")
+
+    @property
+    def beer_style(self) -> str:
+        return self._json.get("beerStyle")
+
+
 class BrewCreatorError(Exception):
     pass
 
@@ -85,39 +138,87 @@ class BrewCreatorEquipment(ABC):
         return self._json["name"]
 
     @property
-    def is_active(self) -> bool:
-        return self._json["isActive"]
-
-    @property
     def last_activity_time(self) -> datetime:
         return datetime.fromisoformat(self._json["lastActivityTime"])
+
+    @property
+    def is_logging_data(self) -> bool:
+        return self._json.get("isLoggingData")
+
+    @property
+    def batch_info(self) -> BatchInfo | None:
+        if self._json["brewName"]:
+            return BatchInfo(self._json)
+        return None
 
     @property
     def json(self) -> dict[str, any]:
         return self._json
 
+    async def set_batch_info(
+        self,
+        brew_name: str | None = None,
+        owner: str | None = None,
+        fg: float | None = None,
+        og: float | None = None,
+        ebc: float | None = None,
+        ibu: float | None = None,
+        volume: float | None = None,
+        fermentation_type: FermentationType | None = None,
+        beer_style: str | None = None,
+    ) -> bool:
+        options = {}
+        if brew_name is not None:
+            options["brewName"] = brew_name
+        if owner is not None:
+            options["owner"] = owner
+        if fg is not None:
+            options["fg"] = fg
+        if og is not None:
+            options["og"] = og
+        if ebc is not None:
+            options["ebc"] = ebc
+        if ibu is not None:
+            options["ibu"] = ibu
+        if volume is not None:
+            options["volume"] = volume
+        if fermentation_type is not None:
+            options["fermented"] = fermentation_type.value
+        if beer_style is not None:
+            options["beerStyle"] = beer_style
+        return await self._update_equipment(options)
+
     async def _update_equipment(self, json_payload: dict[str, any]) -> bool:
         return await self._api._update_equipment_state(self.id, json_payload)
+
+
+class Tilt(BrewCreatorEquipment):
+    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
+        super().__init__(api, json)
+
+    @property
+    def specific_gravity(self) -> float | None:
+        return self._json["sg"]
+
+    @property
+    def color(self) -> TiltColor:
+        return TiltColor(self._json["color"])
+
+    @property
+    def abv(self) -> float:
+        return self._json["abv"]
 
 
 class Ferminator(BrewCreatorEquipment):
     def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
         super().__init__(api, json)
-        self._connected_equipment_list: list[BrewCreatorEquipment] | None = None
+        self._connected_equipment_list: list[BrewCreatorEquipment] = []
 
     @property
     def actual_temperature(self) -> float | None:
-        if self._connected_equipment_list is not None:
-            tilt = next(
-                (
-                    e
-                    for e in self._connected_equipment_list
-                    if isinstance(e, Tilt) and e._json["isLoggingData"]
-                ),
-                None,
-            )
-            if tilt is not None:
-                return tilt.actual_temperature
+        tilt = self.__connected_tilt
+        if tilt is not None:
+            return tilt.actual_temperature
         return self._json["actualTemperature"]
 
     @property
@@ -155,8 +256,12 @@ class Ferminator(BrewCreatorEquipment):
         return self._json["deviceTwinState"]["reportedHwVersion"]
 
     @property
+    def is_connected(self) -> bool:
+        return self._json["deviceTwinState"]["connectionState"] == "Connected"
+
+    @property
     def connected_equipment(self) -> list[BrewCreatorEquipment]:
-        return self._json["connectedEquipments"] or []
+        return self._connected_equipment_list
 
     async def set_fan_speed(self, fan_speed: int) -> bool:
         return await self._update_equipment({"fanSpeed": fan_speed})
@@ -167,23 +272,24 @@ class Ferminator(BrewCreatorEquipment):
     async def set_regulating_temperature(self, is_regulating: bool) -> bool:
         return await self._update_equipment({"isRegulatingTemperature": is_regulating})
 
+    async def set_logging_data(self, is_logging_data: bool) -> bool:
+        return await self._update_equipment({"isLoggingData": is_logging_data})
+
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
         self._connected_equipment_list = [
             e for e in equipment if e.id in self._json["connectedEquipments"]
         ]
 
-
-class Tilt(BrewCreatorEquipment):
-    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
-        super().__init__(api, json)
-
     @property
-    def specific_gravity(self) -> float:
-        return self._json["sg"]
-
-    @property
-    def color(self) -> TiltColor:
-        return TiltColor(self._json["color"])
+    def __connected_tilt(self) -> Tilt | None:
+        return next(
+            (
+                e
+                for e in self.connected_equipment
+                if isinstance(e, Tilt) and e.is_logging_data
+            ),
+            None,
+        )
 
 
 class BrewCreatorAPI:
@@ -217,8 +323,7 @@ class BrewCreatorAPI:
     async def list_equipment(self) -> dict[str, BrewCreatorEquipment]:
         data = await self.equipment_json()
         equipment_list = [
-            e
-            for e in [self.__create_equipment(e) for e in data["data"] if e is not None]
+            self.__create_equipment(e) for e in data["data"] if e is not None
         ]
         for e in filter(lambda x: isinstance(x, Ferminator), equipment_list):
             e._update_connected_equipment(equipment_list)
@@ -410,6 +515,9 @@ class BrewCreatorAPI:
             },
         ) as response:
             if response.status != 200:
+                if response.status == 400:
+                    # TODO Automatic retry on 400
+                    _LOGGER.info("Response headers from 400: %s", response.headers)
                 raise BrewCreatorInvalidAuthError(
                     f"Failed to authenticate: {response.status}"
                 )

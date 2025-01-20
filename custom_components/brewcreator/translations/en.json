@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Device is already configured",
+            "no_ferminator": "No Ferminator found"
         },
         "error": {
             "cannot_connect": "Failed to connect",
@@ -15,6 +16,26 @@
                     "username": "Username"
                 }
             }
+        }
+    },
+    "options": {
+        "step": {
+          "init": {
+            "title": "Batch",
+            "description": "Specify details about your batch",
+            "data": {
+              "batch_info_beer_style": "Style",
+              "batch_info_brew_name": "Batch Name",
+              "batch_info_ebc": "EBC",
+              "batch_info_fermentation_type": "Fermented",
+              "batch_info_fg": "FG",
+              "batch_info_ibu": "IBU",
+              "batch_info_og": "OG",
+              "batch_info_owner": "Brewer",
+              "batch_info_started": "Started",
+              "batch_info_volume": "Volume (L)"
+            }
+          }
         }
     }
 }

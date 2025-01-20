@@ -19,7 +19,7 @@ class BrewCreatorDataUpdateCoordinator(
         self,
         hass: HomeAssistant,
         api: BrewCreatorAPI,
-        entry: ConfigEntry['BrewCreatorDataUpdateCoordinator'],
+        entry: ConfigEntry["BrewCreatorDataUpdateCoordinator"],
     ) -> None:
         super().__init__(
             hass,

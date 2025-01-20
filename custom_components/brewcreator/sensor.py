@@ -1,5 +1,6 @@
 """Sensor entities for Tilt devices."""
 
+from abc import ABC
 from datetime import datetime
 
 from homeassistant.components.sensor import (
@@ -8,116 +9,269 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import Ferminator, Tilt
-from .const import DOMAIN
+from .api import FermentationType
 from .coordinator import BrewCreatorDataUpdateCoordinator
-from .device import ferminator_device_info, tilt_device_info
+from .entity import (
+    FerminatorEntity,
+    TiltEntity,
+    register_ferminator_entities,
+    register_tilt_entities,
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry[BrewCreatorDataUpdateCoordinator],
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
     """Set up the Tilt Hydrometer and Ferminator sensors."""
-    coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data
-    for equipment in coordinator.data.values():
-        if isinstance(equipment, Tilt):
-            async_add_entities(
-                [
-                    TiltSensorEntity(
-                        coordinator,
-                        equipment.id,
-                        SensorDeviceClass.TEMPERATURE,
-                    ),
-                    TiltSensorEntity(
-                        coordinator,
-                        equipment.id,
-                        None,
-                    ),
-                    TiltSensorEntity(
-                        coordinator,
-                        equipment.id,
-                        SensorDeviceClass.TIMESTAMP,
-                    ),
-                ],
-                True,
-            )
-        elif isinstance(equipment, Ferminator):
-            async_add_entities(
-                [FerminatorSensorEntity(coordinator, equipment.id)], True
-            )
+    register_ferminator_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, id: [
+            FerminatorLastActivityEntity(coordinator, id),
+            FerminatorBrewDateEntity(coordinator, id),
+            FerminatorOwnerEntity(coordinator, id),
+            FerminatorEbcEntity(coordinator, id),
+            FerminatorIbuEntity(coordinator, id),
+            FerminatorBatchVolumeEntity(coordinator, id),
+            FerminatorFermentationTypeEntity(coordinator, id),
+            FerminatorBeerStyleEntity(coordinator, id),
+        ],
+    )
+    register_tilt_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, id: [
+            TiltTemperatureEntity(coordinator, id),
+            TiltSpecificGravityEntity(coordinator, id),
+            TiltLastActivityEntity(coordinator, id),
+            TiltAbvEntity(coordinator, id),
+        ],
+    )
 
 
-class TiltSensorEntity(CoordinatorEntity, SensorEntity):
+class TiltSensorEntity(TiltEntity, SensorEntity, ABC):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
-        device_class: SensorDeviceClass | None,
-    ):
-        super().__init__(coordinator)
-        self._brewcreator_id = id
-        self._attr_device_info = tilt_device_info(self.__tilt())
-        self._attr_device_class = device_class
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        if device_class == SensorDeviceClass.TEMPERATURE:
-            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-            self._attr_name = "Temperature"
-            self._attr_suggested_display_precision = 0
-            unique_id_suffix = "temp"
-        elif device_class == SensorDeviceClass.TIMESTAMP:
-            self._attr_name = "Last Activity"
-            unique_id_suffix = "last_activity"
-        else:
-            self._attr_name = "Specific Gravity"
-            self._attr_suggested_display_precision = 3
-            unique_id_suffix = "sg"
-        self._attr_has_entity_name = True
-        self._attr_unique_id = f"{DOMAIN}_{id}_{unique_id_suffix}"
-
-    @property
-    def native_value(self) -> float | datetime | None:
-        if self.device_class == SensorDeviceClass.TEMPERATURE:
-            return self.__tilt().actual_temperature
-        if self.device_class == SensorDeviceClass.TIMESTAMP:
-            return self.__tilt().last_activity_time
-        return self.__tilt().specific_gravity
-
-    @property
-    def available(self) -> bool:
-        return self.__tilt().is_active
-
-    def __tilt(self) -> Tilt:
-        return self.coordinator.data[self._brewcreator_id]
+        name: str,
+        unique_id_suffix: str,
+    ) -> None:
+        super().__init__(coordinator, id, name, unique_id_suffix)
 
 
-class FerminatorSensorEntity(CoordinatorEntity, SensorEntity):
+class TiltTemperatureEntity(TiltSensorEntity):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
-    ):
-        super().__init__(coordinator)
-        self._brewcreator_id = id
-        self._attr_device_info = ferminator_device_info(self.__ferminator())
+    ) -> None:
+        super().__init__(coordinator, id, "Temperature", "temp")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_suggested_display_precision = 0
         self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        return self._tilt().actual_temperature
+
+
+class TiltLastActivityEntity(TiltSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Last Activity", "last_activity")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
-        self._attr_name = "Last Activity"
-        self._attr_unique_id = f"{DOMAIN}_{id}_last_activity"
+        self._attr_state_class = None
 
     @property
     def native_value(self) -> datetime | None:
-        return self.__ferminator().last_activity_time
+        return self._tilt().last_activity_time
 
     @property
     def available(self) -> bool:
-        return self.__ferminator().is_active
+        return self.native_value is not None
 
-    def __ferminator(self) -> Ferminator:
-        return self.coordinator.data[self._brewcreator_id]
+
+class TiltSpecificGravityEntity(TiltSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Specific Gravity", "sg")
+        self._attr_suggested_display_precision = 3
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        return self._tilt().specific_gravity
+
+
+class TiltAbvEntity(TiltSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "ABV", "abv")
+        self._attr_suggested_display_precision = 1
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        return self._tilt().abv
+
+
+class FerminatorSensorEntity(FerminatorEntity, SensorEntity, ABC):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+        name: str,
+        unique_id_suffix: str,
+    ):
+        super().__init__(coordinator, id, name, unique_id_suffix)
+
+
+class FerminatorLastActivityEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Last Activity", "last_activity")
+        self._attr_state_class = None
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self._ferminator().last_activity_time
+
+    @property
+    def available(self) -> bool:
+        return self.native_value is not None
+
+
+class FerminatorBrewDateEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Brew Start Date", "brew_date")
+        self._attr_state_class = None
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> datetime | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.brew_date if batch_info is not None else None
+
+
+class FerminatorOwnerEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Owner", "owner")
+        self._attr_state_class = None
+        self._attr_device_class = None
+
+    @property
+    def native_value(self) -> str | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.owner if batch_info is not None else None
+
+
+class FerminatorEbcEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "EBC", "ebc")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "EBC"
+
+    @property
+    def native_value(self) -> float | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.ebc if batch_info is not None else None
+
+
+class FerminatorIbuEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "IBU", "ibu")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "IBU"
+
+    @property
+    def native_value(self) -> float | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.ibu if batch_info is not None else None
+
+
+class FerminatorBatchVolumeEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Batch Volume", "batch_volume")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_device_class = SensorDeviceClass.VOLUME_STORAGE
+        self._attr_native_unit_of_measurement = UnitOfVolume.LITERS
+
+    @property
+    def native_value(self) -> float | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.volume if batch_info is not None else None
+
+
+class FerminatorFermentationTypeEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Fermentation Type", "fermentation_type")
+        self._attr_state_class = None
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = [ft.value for ft in FermentationType]
+
+    @property
+    def native_value(self) -> str | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.fermentation_type.value if batch_info is not None else None
+
+
+class FerminatorBeerStyleEntity(FerminatorSensorEntity):
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Beer Style", "beer_style")
+        self._attr_state_class = None
+        self._attr_device_class = None
+
+    @property
+    def native_value(self) -> str | None:
+        batch_info = self._ferminator().batch_info
+        return batch_info.beer_style if batch_info is not None else None
