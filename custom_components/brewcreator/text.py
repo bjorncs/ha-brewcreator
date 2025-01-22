@@ -29,5 +29,5 @@ class FerminatorBatchNameEntity(FerminatorEntity, TextEntity):
         return batch_info.brew_name if batch_info is not None else None
 
     async def async_set_value(self, value: str) -> None:
-        await self._ferminator().set_batch_info(brewName=value)
+        await self._ferminator().set_batch_info(brew_name=value)
         await self.coordinator.async_request_refresh()
