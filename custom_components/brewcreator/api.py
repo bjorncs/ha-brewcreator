@@ -4,13 +4,13 @@ from asyncio import Task
 import base64
 from collections.abc import Awaitable, Callable
 import contextlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import hashlib
 import logging
 import re
 import secrets
-from typing import Any
+from typing import Any, Protocol
 
 import aiohttp
 
@@ -103,7 +103,11 @@ class BrewCreatorError(Exception):
     pass
 
 
-class BrewCreatorInvalidAuthError(BrewCreatorError):
+class BrewCreatorInvalidCredentialsError(BrewCreatorError):
+    pass
+
+
+class BrewCreatorAuthError(BrewCreatorError):
     pass
 
 
@@ -292,52 +296,64 @@ class Ferminator(BrewCreatorEquipment):
         )
 
 
+class TokenStorage(Protocol):
+    async def load_tokens(self) -> tuple[str | None, str | None, datetime | None]: ...
+
+    async def save_tokens(
+        self,
+        access_token: str | None,
+        refresh_token: str | None,
+        expire_time: datetime | None,
+    ): ...
+
+
 class BrewCreatorAPI:
     def __init__(
         self,
         username: str,
         password: str,
+        token_storage: TokenStorage,
         session: aiohttp.ClientSession = None,
     ) -> None:
         self.__username = username
         self.__password = password
         self.__session = session or aiohttp.ClientSession()
-        self.__access_token: str | None = None
         self.__update_callback: (
             Callable[[dict[str, BrewCreatorEquipment]], Awaitable[None]] | None
         ) = None
         self.__websocket_task: Task[Any] | None = None
         self.__websocket_ping_task: Task[Any] | None = None
+        self.__token_storage = token_storage
+        self.__access_token: str | None = None
+        self.__refresh_token: str | None = None
+        self.__expire_time: datetime | None = None
+        self.__initial_token_load_completed: bool = False
 
     async def close(self):
         await self.stop_websocket()
         await self.__session.close()
 
-    async def reauthenticate(self):
-        csrf_token = await self.__get_csrf_token()
-        code, code_verifier = await self.__get_code(
-            csrf_token, self.__username, self.__password
-        )
-        self.__access_token = await self.__get_tokens(code, code_verifier)
+    async def verify_username_and_password(self):
+        result = await self.__exchange_username_and_password_for_tokens()
+        if self.__is_access_token_missing_or_expired():
+            await self.__set_tokens(result)
 
     async def list_equipment(self) -> dict[str, BrewCreatorEquipment]:
         data = await self.equipment_json()
         equipment_list = [
-            self.__create_equipment(e) for e in data["data"] if e is not None
+            self.__get_equipment_from_json(e) for e in data["data"] if e is not None
         ]
         for e in filter(lambda x: isinstance(x, Ferminator), equipment_list):
             e._update_connected_equipment(equipment_list)
         return {e.id: e for e in equipment_list}
 
     async def equipment_json(self) -> Any:
-        await self.reauthenticate()
-        async with self.__session.get(
-            "https://api.brewcreator.com/api/v1.0/equipments?PageSize=100&PageNumber=1&Logic=And&Filters=&Sorts=",
-            headers=self.__get_headers(),
-        ) as response:
-            data = await response.json()
-            _LOGGER.debug("Equipment JSON: %s", data)
-            return data
+        data = await self.__do_authenticated_request(
+            "GET",
+            "/api/v1.0/equipments?PageSize=100&PageNumber=1&Logic=And&Filters=&Sorts=",
+        )
+        _LOGGER.debug("Equipment JSON: %s", data)
+        return data
 
     async def start_websocket(
         self,
@@ -363,15 +379,12 @@ class BrewCreatorAPI:
     async def _update_equipment_state(
         self, equipment_id: str, json_payload: dict[str, any]
     ) -> bool:
-        await self.reauthenticate()
-        async with self.__session.put(
-            f"https://api.brewcreator.com/api/v1.0/equipments/{equipment_id}",
-            json=json_payload,
-            headers=self.__get_headers(),
-        ) as response:
-            return (await response.json())["succeeded"]
+        json = await self.__do_authenticated_request(
+            "PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload
+        )
+        return json["succeeded"]
 
-    def __create_equipment(
+    def __get_equipment_from_json(
         self, equipment: dict[str, any]
     ) -> BrewCreatorEquipment | None:
         equipment_type = EquipmentType(equipment["iotHubBrewEquipmentGroupId"])
@@ -385,12 +398,6 @@ class BrewCreatorAPI:
             equipment["id"],
         )
         return None
-
-    def __get_headers(self) -> dict:
-        return {
-            "Authorization": f"Bearer {self.__access_token}",
-            "Accept": "application/json",
-        }
 
     async def __websocket_loop(self) -> None:
         while True:
@@ -406,12 +413,10 @@ class BrewCreatorAPI:
                 await asyncio.sleep(60)
 
     async def __websocket_connect_and_listen(self):
-        await self.reauthenticate()
-        async with self.__session.post(
-            "https://api.brewcreator.com/telemetry/negotiate?negotiateVersion=1",
-            headers=self.__get_headers(),
-        ) as response:
-            connection_token = (await response.json())["connectionToken"]
+        response = await self.__do_authenticated_request(
+            "POST", "/telemetry/negotiate?negotiateVersion=1"
+        )
+        connection_token = response["connectionToken"]
         wss_host = "wss://api.brewcreator.com"
         url = f"{wss_host}/telemetry?id={connection_token}&access_token={self.__access_token}"
         async with self.__session.ws_connect(
@@ -482,6 +487,121 @@ class BrewCreatorAPI:
                 _LOGGER.exception("Failed to send WebSocket SignalR ping: %s", e)
                 return
 
+    async def __do_authenticated_request(
+        self, method: str, path: str, json: dict[str, any] | None = None
+    ) -> dict[str, any] | None:
+        max_attempts = 5
+        sleep_seconds_between_attempts = 1
+        for attempt in range(max_attempts):
+            try:
+                await self.__update_access_token_if_invalid()
+                _LOGGER.debug("Performing request %s %s", method, path)
+                async with self.__session.request(
+                    method,
+                    f"https://api.brewcreator.com{path}",
+                    headers={
+                        "Authorization": f"Bearer {self.__access_token}",
+                        "Accept": "application/json",
+                    },
+                    json=json,
+                ) as response:
+                    if response.status == 401:
+                        raise BrewCreatorAuthError(  # noqa: TRY301
+                            f"Failed to {method} {path}: {response.status}"
+                        )
+                    if response.status == 500:
+                        _LOGGER.info(
+                            "Failed to %s %s: %s", method, path, response.status
+                        )
+                        continue
+                    if response.status != 200:
+                        raise BrewCreatorError(
+                            f"Failed to {method} {path}: {response.status}"
+                        )
+                    return await response.json() if response.content else None
+            except BrewCreatorAuthError as e:
+                _LOGGER.info(
+                    "Failed to authenticate. Attempt %d of %d. Retrying in %d seconds: %s",
+                    attempt + 1,
+                    max_attempts,
+                    sleep_seconds_between_attempts,
+                    e,
+                )
+                self.__access_token = None
+                self.__refresh_token = None
+                self.__expire_time = None
+                await self.__token_storage.save_tokens(None, None, None)
+            await asyncio.sleep(sleep_seconds_between_attempts)
+        raise BrewCreatorError(
+            "Failed to perform request after %d attempts", max_attempts
+        )
+
+    async def __update_access_token_if_invalid(self):
+        if not self.__initial_token_load_completed:
+            (
+                self.__access_token,
+                self.__refresh_token,
+                self.__expire_time,
+            ) = await self.__token_storage.load_tokens()
+            self.__initial_token_load_completed = True
+            _LOGGER.debug(
+                "Loaded access token from storage with expiry %s", self.__expire_time
+            )
+        if not self.__is_access_token_missing_or_expired():
+            _LOGGER.debug(
+                "Access token is assumed valid as it has expiry %s",
+                self.__expire_time,
+            )
+            return
+        if self.__refresh_token is not None:
+            await self.__set_tokens(await self.__exchange_refresh_token_for_tokens())
+            return
+        await self.__set_tokens(
+            await self.__exchange_username_and_password_for_tokens()
+        )
+
+    def __is_access_token_missing_or_expired(self) -> bool:
+        if self.__access_token is None:
+            _LOGGER.debug("Access token is missing")
+            return True
+        if self.__expire_time is None:
+            _LOGGER.debug("Expire time is missing")
+            return True
+        if datetime.now() > self.__expire_time - timedelta(minutes=2):
+            _LOGGER.debug("Access token is expired (expiry=%s)", self.__expire_time)
+            return True
+        return False
+
+    async def __exchange_refresh_token_for_tokens(self) -> tuple[str, str, datetime]:
+        _LOGGER.debug("Exchanging refresh token for new tokens")
+        async with self.__session.post(
+            "https://identity.brewcreator.com/connect/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": "brew-creator",
+                "refresh_token": self.__refresh_token,
+            },
+        ) as response:
+            if response.status != 200:
+                raise BrewCreatorAuthError(
+                    f"Failed to refresh tokens: {response.status}"
+                )
+            json = await response.json()
+            return (
+                json["access_token"],
+                json["refresh_token"],
+                datetime.now() + timedelta(seconds=json["expires_in"]),
+            )
+
+    async def __exchange_username_and_password_for_tokens(
+        self,
+    ) -> tuple[str, str, datetime]:
+        csrf_token = await self.__get_csrf_token()
+        code, code_verifier = await self.__exchange_username_and_password_for_code(
+            csrf_token, self.__username, self.__password
+        )
+        return await self.__exchange_code_for_tokens(code, code_verifier)
+
     async def __get_csrf_token(self) -> str:
         async with self.__session.get(
             "https://identity.brewcreator.com/Account/Login", timeout=60
@@ -491,11 +611,14 @@ class BrewCreatorAPI:
             pattern = (
                 '<input name="__RequestVerificationToken" type="hidden" value="([^"]*)"'
             )
-            return re.search(pattern, await response.text()).group(1)
+            csrf_token = re.search(pattern, await response.text()).group(1)
+            _LOGGER.debug("Found CSRF token of length %d", len(csrf_token))
+            return csrf_token
 
-    async def __get_code(
+    async def __exchange_username_and_password_for_code(
         self, csrf_token: str, username: str, password: str
     ) -> tuple[str, str]:
+        _LOGGER.debug("Exchanging username and password for code")
         nonce = secrets.token_urlsafe(16)
         state = secrets.token_urlsafe(16)
         code_verifier = secrets.token_urlsafe(67)
@@ -515,23 +638,22 @@ class BrewCreatorAPI:
             },
         ) as response:
             if response.status != 200:
-                if response.status == 400:
-                    # TODO Automatic retry on 400
-                    _LOGGER.info("Response headers from 400: %s", response.headers)
-                raise BrewCreatorInvalidAuthError(
-                    f"Failed to authenticate: {response.status}"
-                )
-            code = response.url.query["code"]
-            if not code:
-                raise BrewCreatorInvalidAuthError(
-                    f"Failed to get authorization code: {response.url.raw_query_string}"
+                raise BrewCreatorAuthError(f"Failed to authenticate: {response.status}")
+            if response.url.path == "/account/login":
+                raise BrewCreatorInvalidCredentialsError("Invalid username/password")
+            if "code" not in response.url.query:
+                raise BrewCreatorAuthError(
+                    "Cannot find 'code' in %s", response.url.path_qs
                 )
             return (
-                code,
+                response.url.query["code"],
                 code_verifier,
             )
 
-    async def __get_tokens(self, code: str, code_verifier: str) -> str:
+    async def __exchange_code_for_tokens(
+        self, code: str, code_verifier: str
+    ) -> tuple[str, str, datetime]:
+        _LOGGER.debug("Exchanging code for tokens")
         async with self.__session.post(
             "https://identity.brewcreator.com/connect/token",
             data={
@@ -541,6 +663,22 @@ class BrewCreatorAPI:
                 "code": code,
                 "redirect_uri": "https://brewcreator.com",
             },
+            timeout=20,
         ) as response:
+            if response.status != 200:
+                raise BrewCreatorAuthError(
+                    f"Failed to exchange code for tokens: {response.status}"
+                )
             json = await response.json()
-            return json["access_token"]
+            return (
+                json["access_token"],
+                json["refresh_token"],
+                datetime.now() + timedelta(seconds=json["expires_in"]),
+            )
+
+    async def __set_tokens(self, tokens: tuple[str, str, datetime]) -> None:
+        _LOGGER.debug("Storing new access token with expiry %s", tokens[2])
+        self.__access_token, self.__refresh_token, self.__expire_time = tokens
+        await self.__token_storage.save_tokens(
+            self.__access_token, self.__refresh_token, self.__expire_time
+        )

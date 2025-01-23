@@ -20,7 +20,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
     BrewCreatorAPI,
-    BrewCreatorInvalidAuthError,
+    BrewCreatorInvalidCredentialsError,
     FermentationType,
     Ferminator,
 )
@@ -29,15 +29,16 @@ from .const import (
     CONF_BATCH_INFO_BREW_NAME,
     CONF_BATCH_INFO_EBC,
     CONF_BATCH_INFO_FERMENTATION_TYPE,
-    CONF_BATCH_INFO_IBU,
-    CONF_BATCH_INFO_OWNER,
-    CONF_BATCH_INFO_VOLUME,
     CONF_BATCH_INFO_FG,
+    CONF_BATCH_INFO_IBU,
     CONF_BATCH_INFO_OG,
+    CONF_BATCH_INFO_OWNER,
     CONF_BATCH_INFO_STARTED,
+    CONF_BATCH_INFO_VOLUME,
     DOMAIN,
 )
 from .coordinator import BrewCreatorDataUpdateCoordinator
+from .token_store import BrewCreatorTokenStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,10 +58,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     api = BrewCreatorAPI(
         data[CONF_USERNAME],
         data[CONF_PASSWORD],
+        BrewCreatorTokenStore(hass),
         async_get_clientsession(hass),
     )
 
-    await api.reauthenticate()
+    await api.verify_username_and_password()
 
     return {"title": "BrewCreator"}
 
@@ -80,7 +82,7 @@ class BrewCreatorConfigFlow(ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
             except aiohttp.ClientConnectionError:
                 errors["base"] = "cannot_connect"
-            except BrewCreatorInvalidAuthError:
+            except BrewCreatorInvalidCredentialsError:
                 errors["base"] = "invalid_auth"
             except Exception:
                 _LOGGER.exception("Unexpected exception")

@@ -46,7 +46,7 @@ class FerminatorOriginalGravityEntity(FerminatorNumberEntity):
         batch_info = self._ferminator().batch_info
         return batch_info.og if batch_info is not None else None
 
-    async def async_set_value(self, value: float) -> None:
+    async def async_set_native_value(self, value: float) -> None:
         await self._ferminator().set_batch_info(og=value)
         await self.coordinator.async_request_refresh()
 
