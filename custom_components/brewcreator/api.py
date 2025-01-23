@@ -170,6 +170,7 @@ class BrewCreatorEquipment(ABC):
         volume: float | None = None,
         fermentation_type: FermentationType | None = None,
         beer_style: str | None = None,
+        is_logging_data: bool | None = None,
     ) -> bool:
         options = {}
         if brew_name is not None:
@@ -190,6 +191,8 @@ class BrewCreatorEquipment(ABC):
             options["fermented"] = fermentation_type.value
         if beer_style is not None:
             options["beerStyle"] = beer_style
+        if is_logging_data is not None:
+            options["isLoggingData"] = is_logging_data
         return await self._update_equipment(options)
 
     async def _update_equipment(self, json_payload: dict[str, any]) -> bool:
@@ -275,9 +278,6 @@ class Ferminator(BrewCreatorEquipment):
 
     async def set_regulating_temperature(self, is_regulating: bool) -> bool:
         return await self._update_equipment({"isRegulatingTemperature": is_regulating})
-
-    async def set_logging_data(self, is_logging_data: bool) -> bool:
-        return await self._update_equipment({"isLoggingData": is_logging_data})
 
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
         self._connected_equipment_list = [

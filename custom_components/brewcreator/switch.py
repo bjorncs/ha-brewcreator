@@ -29,9 +29,9 @@ class FerminatorBatchSwitchEntity(FerminatorEntity, SwitchEntity):
         return self._ferminator().is_logging_data
 
     async def async_turn_on(self, **kwargs) -> None:
-        await self._ferminator().set_logging_data(True)
+        await self._ferminator().set_batch_info(is_logging_data=True)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        await self._ferminator().set_logging_data(False)
+        await self._ferminator().set_batch_info(is_logging_data=False)
         await self.coordinator.async_request_refresh()

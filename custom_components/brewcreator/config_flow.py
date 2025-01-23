@@ -128,9 +128,8 @@ class BrewCreatorOptionsFlow(OptionsFlow):
                 og=user_input[CONF_BATCH_INFO_OG],
                 fg=user_input[CONF_BATCH_INFO_FG],
                 beer_style=user_input[CONF_BATCH_INFO_BEER_STYLE],
+                is_logging_data=user_input[CONF_BATCH_INFO_STARTED],
             )
-            if user_input[CONF_BATCH_INFO_STARTED] is not None:
-                await ferminator.set_logging_data(user_input[CONF_BATCH_INFO_STARTED])
             await self.coordinator.async_request_refresh()
             return self.async_create_entry(title="Batch Info", data=user_input)
         batch_info = ferminator.batch_info
