@@ -480,7 +480,7 @@ class BrewCreatorAPI:
             try:
                 _LOGGER.debug("Sending WebSocket SignalR ping message")
                 await ws.send_str('{"type":6}')
-            except asyncio.CancelledError:
+            except asyncio.CancelledError | aiohttp.ClientConnectionResetError:
                 _LOGGER.debug("WebSocket SignalR ping task stopped")
                 return
             except Exception as e:
