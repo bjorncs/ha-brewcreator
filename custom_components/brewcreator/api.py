@@ -13,6 +13,7 @@ import secrets
 from typing import Any, Protocol
 
 import aiohttp
+from aiohttp.client_exceptions import ClientConnectionResetError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -408,8 +409,8 @@ class BrewCreatorAPI:
                     "WebSocket listener stopped. Shutting down websocket task."
                 )
                 return
-            except Exception as e:
-                _LOGGER.exception("Unexpected error in WebSocket listener: %s", e)
+            except Exception:
+                _LOGGER.exception("Unexpected error in WebSocket listener")
                 await asyncio.sleep(60)
 
     async def __websocket_connect_and_listen(self):
@@ -480,11 +481,14 @@ class BrewCreatorAPI:
             try:
                 _LOGGER.debug("Sending WebSocket SignalR ping message")
                 await ws.send_str('{"type":6}')
-            except asyncio.CancelledError | aiohttp.ClientConnectionResetError:
+            except (
+                asyncio.CancelledError,
+                ClientConnectionResetError,
+            ):
                 _LOGGER.debug("WebSocket SignalR ping task stopped")
                 return
-            except Exception as e:
-                _LOGGER.exception("Failed to send WebSocket SignalR ping: %s", e)
+            except Exception:
+                _LOGGER.exception("Failed to send WebSocket SignalR ping")
                 return
 
     async def __do_authenticated_request(
