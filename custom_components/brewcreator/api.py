@@ -291,7 +291,9 @@ class Ferminator(BrewCreatorEquipment):
             (
                 e
                 for e in self.connected_equipment
-                if isinstance(e, Tilt) and e.is_logging_data
+                if isinstance(e, Tilt)
+                and e.specific_gravity is not None
+                and e.actual_temperature is not None
             ),
             None,
         )
