@@ -4,13 +4,14 @@ from asyncio import Task
 import base64
 from collections.abc import Awaitable, Callable
 import contextlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
 import logging
 import re
 import secrets
 from typing import Any, Protocol
+import zoneinfo
 
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionResetError
@@ -215,6 +216,16 @@ class Tilt(BrewCreatorEquipment):
     @property
     def abv(self) -> float:
         return self._json["abv"]
+
+    @property
+    def last_activity_time(self) -> datetime:
+        # The last activity time reported from the Tilt is not UTC. It's been observed as CEST during daylight saving time,
+        # while ISO-8601 string claims it's UTC. Assume it's Danish local time and convert to UTC.
+        # This has only been observed for Tilt devices (not Ferminator).
+        copenhagen_time = datetime.fromisoformat(self._json["lastActivityTime"])
+        copenhagen_tz = zoneinfo.ZoneInfo("Europe/Copenhagen")
+        aware_time = copenhagen_time.replace(tzinfo=copenhagen_tz)
+        return aware_time.astimezone(timezone.utc)
 
 
 class Ferminator(BrewCreatorEquipment):
