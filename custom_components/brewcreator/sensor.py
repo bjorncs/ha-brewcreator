@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature, UnitOfVolume
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -91,6 +91,8 @@ class TiltLastActivityEntity(TiltSensorEntity):
     ) -> None:
         super().__init__(coordinator, id, "Last Activity", "last_activity")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_entity_registry_enabled_default = False
         self._attr_state_class = None
 
     @property
@@ -153,6 +155,8 @@ class FerminatorLastActivityEntity(FerminatorSensorEntity):
         super().__init__(coordinator, id, "Last Activity", "last_activity")
         self._attr_state_class = None
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_entity_registry_enabled_default = False
 
     @property
     def native_value(self) -> datetime | None:
