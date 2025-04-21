@@ -331,6 +331,7 @@ class BrewCreatorAPI:
     ) -> None:
         self.__username = username
         self.__password = password
+        self.__own_session = session is None
         self.__session = session or aiohttp.ClientSession()
         self.__update_callback: (
             Callable[[dict[str, BrewCreatorEquipment]], Awaitable[None]] | None
@@ -345,7 +346,8 @@ class BrewCreatorAPI:
 
     async def close(self):
         await self.stop_websocket()
-        await self.__session.close()
+        if self.__own_session:
+            await self.__session.close()
 
     async def verify_username_and_password(self):
         result = await self.__exchange_username_and_password_for_tokens()
