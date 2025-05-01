@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import BrewCreatorEquipment, Ferminator, Tilt
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
+from datetime import datetime, timedelta
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,10 +77,15 @@ class TiltEntity(BrewCreatorEntity, ABC):
 
     @property
     def available(self) -> bool:
-        return (
-            self._tilt().specific_gravity is not None
-            or self._tilt().actual_temperature is not None
+        """Return whether the tilt is available based on data and activity time."""
+
+        tilt = self._tilt()
+        has_data = (
+            tilt.specific_gravity is not None or tilt.actual_temperature is not None
         )
+        recent_activity = datetime.now() - tilt.last_activity_time < timedelta(hours=12)
+
+        return has_data and recent_activity
 
     def _tilt(self) -> Tilt:
         return self._brewcreator_device
