@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import BrewCreatorEquipment, Ferminator, Tilt
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class TiltEntity(BrewCreatorEntity, ABC):
         has_data = (
             tilt.specific_gravity is not None or tilt.actual_temperature is not None
         )
-        recent_activity = datetime.now() - tilt.last_activity_time < timedelta(hours=12)
+        recent_activity = datetime.now(timezone.utc) - tilt.last_activity_time < timedelta(hours=12)
 
         return has_data and recent_activity
 
