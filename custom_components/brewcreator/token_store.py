@@ -1,8 +1,11 @@
 import asyncio
 from datetime import datetime
+import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BrewCreatorTokenStore:
@@ -15,11 +18,18 @@ class BrewCreatorTokenStore:
             data = await self._store.async_load()
             if data is None:
                 return None, None, None
-            return (
-                data["access_token"],
-                data["refresh_token"],
-                datetime.fromisoformat(data["expire_time"]),
-            )
+            try:
+                expire_time = data.get("expire_time")
+                return (
+                    data.get("access_token"),
+                    data.get("refresh_token"),
+                    datetime.fromisoformat(expire_time)
+                    if expire_time is not None
+                    else None,
+                )
+            except (AttributeError, TypeError, ValueError):
+                _LOGGER.warning("Ignoring invalid token storage")
+                return None, None, None
 
     async def save_tokens(
         self,
