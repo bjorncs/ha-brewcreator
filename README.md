@@ -1,6 +1,7 @@
 # BrewCreator integration for Home Assistant
-Monitor and control your devices in [BrewCreator](https://www.brewolution.com/brewcreator-eng) such as
-[Ferminator Connect](https://www.brewolution.com/ferminator-connect.html) through Home Assistant.
+Monitor and control your devices in [BrewCreator](https://brewcreator.com) such as
+[Fercubator Connect](https://www.brewolution.com/fermentation/fercubator-and-accessories/fercubator-connect-wifi-thermostat-controlled-fermentation)
+(previously named Ferminator Connect) through Home Assistant.
 
 ![BrewCreator](assets/images/ferminator-climate-entity.png)
 
