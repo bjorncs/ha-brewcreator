@@ -16,4 +16,4 @@ Please attach [diagnostics output](https://www.home-assistant.io/docs/configurat
 [enable debug logging](https://www.home-assistant.io/docs/configuration/troubleshooting/#enabling-debug-logging) prior to dumping the log).
 
 # License
-This work is licensed under the MIT license. See [LICENSE](LICENSE) for more information.
+This work is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.
