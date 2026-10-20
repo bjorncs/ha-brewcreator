@@ -1,4 +1,4 @@
-"""Sensor entities for Tilt devices."""
+"""Sensor entities for Ferminator and hydrometer devices such as Tilt and Graviator."""
 
 from abc import ABC
 from datetime import datetime
@@ -17,9 +17,9 @@ from .api import FermentationType
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .entity import (
     FerminatorEntity,
-    TiltEntity,
+    HydrometerEntity,
     register_ferminator_entities,
-    register_tilt_entities,
+    register_hydrometer_entities,
 )
 
 
@@ -28,7 +28,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
-    """Set up the Tilt Hydrometer and Ferminator sensors."""
+    """Set up the hydrometer (Tilt, Graviator) and Ferminator sensors."""
     register_ferminator_entities(
         entry,
         async_add_entities,
@@ -43,19 +43,19 @@ async def async_setup_entry(
             FerminatorBeerStyleEntity(coordinator, id),
         ],
     )
-    register_tilt_entities(
+    register_hydrometer_entities(
         entry,
         async_add_entities,
         lambda coordinator, id: [
-            TiltTemperatureEntity(coordinator, id),
-            TiltSpecificGravityEntity(coordinator, id),
-            TiltLastActivityEntity(coordinator, id),
-            TiltAbvEntity(coordinator, id),
+            HydrometerTemperatureEntity(coordinator, id),
+            HydrometerSpecificGravityEntity(coordinator, id),
+            HydrometerLastActivityEntity(coordinator, id),
+            HydrometerAbvEntity(coordinator, id),
         ],
     )
 
 
-class TiltSensorEntity(TiltEntity, SensorEntity, ABC):
+class HydrometerSensorEntity(HydrometerEntity, SensorEntity, ABC):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -66,7 +66,7 @@ class TiltSensorEntity(TiltEntity, SensorEntity, ABC):
         super().__init__(coordinator, id, name, unique_id_suffix)
 
 
-class TiltTemperatureEntity(TiltSensorEntity):
+class HydrometerTemperatureEntity(HydrometerSensorEntity):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -80,10 +80,10 @@ class TiltTemperatureEntity(TiltSensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._tilt().actual_temperature
+        return self._hydrometer().actual_temperature
 
 
-class TiltLastActivityEntity(TiltSensorEntity):
+class HydrometerLastActivityEntity(HydrometerSensorEntity):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -97,14 +97,14 @@ class TiltLastActivityEntity(TiltSensorEntity):
 
     @property
     def native_value(self) -> datetime | None:
-        return self._tilt().last_activity_time
+        return self._hydrometer().last_activity_time
 
     @property
     def available(self) -> bool:
         return self.native_value is not None
 
 
-class TiltSpecificGravityEntity(TiltSensorEntity):
+class HydrometerSpecificGravityEntity(HydrometerSensorEntity):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -116,10 +116,10 @@ class TiltSpecificGravityEntity(TiltSensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._tilt().specific_gravity
+        return self._hydrometer().specific_gravity
 
 
-class TiltAbvEntity(TiltSensorEntity):
+class HydrometerAbvEntity(HydrometerSensorEntity):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -132,7 +132,7 @@ class TiltAbvEntity(TiltSensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._tilt().abv
+        return self._hydrometer().abv
 
 
 class FerminatorSensorEntity(FerminatorEntity, SensorEntity, ABC):

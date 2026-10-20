@@ -7,7 +7,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import BrewCreatorEquipment, Ferminator, Tilt
+from .api import BrewCreatorEquipment, Ferminator, Hydrometer, Tilt
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from datetime import datetime, timedelta, timezone
@@ -28,14 +28,20 @@ def ferminator_device_info(ferminator: Ferminator) -> DeviceInfo:
     )
 
 
-def tilt_device_info(tilt: Tilt) -> DeviceInfo:
-    """Return device info for Tilt."""
+def hydrometer_device_info(hydrometer: Hydrometer) -> DeviceInfo:
+    """Return device info for hydrometers such as Tilt and Graviator."""
+    if isinstance(hydrometer, Tilt):
+        manufacturer = "Tilt"
+        model = hydrometer.color.name
+    else:
+        manufacturer = "Brewolution"
+        model = hydrometer.equipment_type.value
     return DeviceInfo(
-        identifiers={(DOMAIN, tilt.serial_number)},
-        manufacturer="Tilt",
-        serial_number=tilt.serial_number,
-        model=tilt.color.name,
-        name=tilt.name,
+        identifiers={(DOMAIN, hydrometer.serial_number)},
+        manufacturer=manufacturer,
+        serial_number=hydrometer.serial_number,
+        model=model,
+        name=hydrometer.name,
     )
 
 
@@ -64,7 +70,7 @@ class BrewCreatorEntity(CoordinatorEntity, ABC):
         return self.coordinator.data[self._brewcreator_id]
 
 
-class TiltEntity(BrewCreatorEntity, ABC):
+class HydrometerEntity(BrewCreatorEntity, ABC):
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
@@ -73,21 +79,22 @@ class TiltEntity(BrewCreatorEntity, ABC):
         unique_id_suffix: str,
     ):
         super().__init__(coordinator, id, name, unique_id_suffix)
-        self._attr_device_info = tilt_device_info(self._tilt())
+        self._attr_device_info = hydrometer_device_info(self._hydrometer())
 
     @property
     def available(self) -> bool:
-        """Return whether the tilt is available based on data and activity time."""
+        """Return whether the hydrometer is available based on data and activity time."""
 
-        tilt = self._tilt()
+        hydrometer = self._hydrometer()
         has_data = (
-            tilt.specific_gravity is not None or tilt.actual_temperature is not None
+            hydrometer.specific_gravity is not None
+            or hydrometer.actual_temperature is not None
         )
-        recent_activity = datetime.now(timezone.utc) - tilt.last_activity_time < timedelta(hours=12)
+        recent_activity = datetime.now(timezone.utc) - hydrometer.last_activity_time < timedelta(hours=12)
 
         return has_data and recent_activity
 
-    def _tilt(self) -> Tilt:
+    def _hydrometer(self) -> Hydrometer:
         return self._brewcreator_device
 
 
@@ -117,11 +124,11 @@ class CreateFerminatorEntitiesCallback(Protocol):
         """Create Ferminator entities"""
 
 
-class CreateTiltEntitiesCallback(Protocol):
+class CreateHydrometerEntitiesCallback(Protocol):
     def __call__(
         self, coordinator: BrewCreatorDataUpdateCoordinator, equipment_id: str
-    ) -> list[TiltEntity]:
-        """Create Tilt entities"""
+    ) -> list[HydrometerEntity]:
+        """Create hydrometer entities"""
 
 
 def register_ferminator_entities(
@@ -137,12 +144,14 @@ def register_ferminator_entities(
             )
 
 
-def register_tilt_entities(
+def register_hydrometer_entities(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    create_tilt_entities: CreateTiltEntitiesCallback,
+    create_hydrometer_entities: CreateHydrometerEntitiesCallback,
 ):
     coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data
     for equipment in coordinator.data.values():
-        if isinstance(equipment, Tilt):
-            async_add_entities(create_tilt_entities(coordinator, equipment.id), True)
+        if isinstance(equipment, Hydrometer):
+            async_add_entities(
+                create_hydrometer_entities(coordinator, equipment.id), True
+            )

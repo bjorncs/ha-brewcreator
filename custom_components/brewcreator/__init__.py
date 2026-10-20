@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]
 ) -> bool:
-    """Set up devices from BrewCreator such as Ferminator and Tilt"""
+    """Set up devices from BrewCreator such as Ferminator, Tilt and Graviator"""
     api = BrewCreatorAPI(
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],

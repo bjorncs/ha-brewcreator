@@ -33,6 +33,7 @@ class FerminatorStatus(Enum):
 
 class EquipmentType(Enum):
     TILT = "Tilt"
+    GRAVIATOR = "Graviator"
     FERMINATOR = "Ferminator"
     UNKNOWN = "Unknown"
 
@@ -201,17 +202,10 @@ class BrewCreatorEquipment(ABC):
         return await self._api._update_equipment_state(self.id, json_payload)
 
 
-class Tilt(BrewCreatorEquipment):
-    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
-        super().__init__(api, json)
-
+class Hydrometer(BrewCreatorEquipment, ABC):
     @property
     def specific_gravity(self) -> float | None:
         return self._json["sg"]
-
-    @property
-    def color(self) -> TiltColor:
-        return TiltColor(self._json["color"])
 
     @property
     def abv(self) -> float:
@@ -221,11 +215,21 @@ class Tilt(BrewCreatorEquipment):
     def last_activity_time(self) -> datetime:
         # The last activity time reported from the Tilt is not UTC. It's been observed as CEST during daylight saving time,
         # while ISO-8601 string claims it's UTC. Assume it's Danish local time and convert to UTC.
-        # This has only been observed for Tilt devices (not Ferminator).
+        # This has only been observed for Tilt devices (not Ferminator), and is assumed to also apply to Graviator.
         copenhagen_time = datetime.fromisoformat(self._json["lastActivityTime"])
         copenhagen_tz = zoneinfo.ZoneInfo("Europe/Copenhagen")
         aware_time = copenhagen_time.replace(tzinfo=copenhagen_tz)
         return aware_time.astimezone(timezone.utc)
+
+
+class Tilt(Hydrometer):
+    @property
+    def color(self) -> TiltColor:
+        return TiltColor(self._json["color"])
+
+
+class Graviator(Hydrometer):
+    """Experimental support, assuming Graviator is reported like Tilt (without color)."""
 
 
 class Ferminator(BrewCreatorEquipment):
@@ -235,9 +239,9 @@ class Ferminator(BrewCreatorEquipment):
 
     @property
     def actual_temperature(self) -> float | None:
-        tilt = self.__connected_tilt
-        if tilt is not None:
-            return tilt.actual_temperature
+        hydrometer = self.__connected_hydrometer
+        if hydrometer is not None:
+            return hydrometer.actual_temperature
         return self._json["actualTemperature"]
 
     @property
@@ -297,12 +301,12 @@ class Ferminator(BrewCreatorEquipment):
         ]
 
     @property
-    def __connected_tilt(self) -> Tilt | None:
+    def __connected_hydrometer(self) -> Hydrometer | None:
         return next(
             (
                 e
                 for e in self.connected_equipment
-                if isinstance(e, Tilt)
+                if isinstance(e, Hydrometer)
                 and e.specific_gravity is not None
                 and e.actual_temperature is not None
             ),
@@ -421,6 +425,8 @@ class BrewCreatorAPI:
             return Ferminator(self, equipment)
         if equipment_type == EquipmentType.TILT:
             return Tilt(self, equipment)
+        if equipment_type == EquipmentType.GRAVIATOR:
+            return Graviator(self, equipment)
         if value not in self.__logged_unsupported_types:
             self.__logged_unsupported_types.add(value)
             _LOGGER.warning(
