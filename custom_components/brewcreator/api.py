@@ -310,6 +310,14 @@ class Ferminator(BrewCreatorEquipment):
         )
 
 
+class UnsupportedEquipment(BrewCreatorEquipment):
+    """Equipment of a type not supported by this integration."""
+
+    @property
+    def raw_type(self) -> str:
+        return self._json["iotHubBrewEquipmentGroupId"]
+
+
 class TokenStorage(Protocol):
     async def load_tokens(self) -> tuple[str | None, str | None, datetime | None]: ...
 
@@ -343,6 +351,7 @@ class BrewCreatorAPI:
         self.__refresh_token: str | None = None
         self.__expire_time: datetime | None = None
         self.__initial_token_load_completed: bool = False
+        self.__logged_unsupported_types: set[str] = set()
 
     async def close(self):
         await self.stop_websocket()
@@ -402,18 +411,22 @@ class BrewCreatorAPI:
 
     def __get_equipment_from_json(
         self, equipment: dict[str, any]
-    ) -> BrewCreatorEquipment | None:
-        equipment_type = EquipmentType(equipment["iotHubBrewEquipmentGroupId"])
+    ) -> BrewCreatorEquipment:
+        value = equipment["iotHubBrewEquipmentGroupId"]
+        try:
+            equipment_type = EquipmentType(value)
+        except ValueError:
+            equipment_type = EquipmentType.UNKNOWN
         if equipment_type == EquipmentType.FERMINATOR:
             return Ferminator(self, equipment)
         if equipment_type == EquipmentType.TILT:
             return Tilt(self, equipment)
-        _LOGGER.warning(
-            "Unknown equipment type '%s' with ID '%s'",
-            equipment_type,
-            equipment["id"],
-        )
-        return None
+        if value not in self.__logged_unsupported_types:
+            self.__logged_unsupported_types.add(value)
+            _LOGGER.warning(
+                "Unsupported equipment type '%s' with ID '%s'", value, equipment["id"]
+            )
+        return UnsupportedEquipment(self, equipment)
 
     async def __websocket_loop(self) -> None:
         while True:

@@ -37,5 +37,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "unsupported_equipment": {
+      "title": "Unsupported BrewCreator device: {type}",
+      "description": "The BrewCreator account has device(s) of type \"{type}\" ({names}) that this integration does not support yet. Other devices keep working. Please open an issue and attach the integration's diagnostics download so support can be added."
+    }
   }
 }
