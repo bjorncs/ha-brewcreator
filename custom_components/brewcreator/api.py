@@ -229,7 +229,7 @@ class Tilt(Hydrometer):
 
 
 class Graviator(Hydrometer):
-    """Experimental support, assuming Graviator is reported like Tilt (without color)."""
+    """Graviator hydrometer, reported like Tilt but without color."""
 
 
 class Ferminator(BrewCreatorEquipment):
