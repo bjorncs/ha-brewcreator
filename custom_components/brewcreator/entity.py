@@ -92,7 +92,13 @@ class HydrometerEntity(BrewCreatorEntity, ABC):
         )
         recent_activity = datetime.now(timezone.utc) - hydrometer.last_activity_time < timedelta(hours=12)
 
-        return has_data and recent_activity
+        return has_data and (recent_activity or self._is_linked_ferminator_connected(hydrometer))
+
+    def _is_linked_ferminator_connected(self, hydrometer: Hydrometer) -> bool:
+        # BrewCreator does not always update the last activity time of a hydrometer relayed by a Ferminator,
+        # e.g. when the Tilt has been replaced with one of another color. Trust the Ferminator's connection instead.
+        linked = self.coordinator.data.get(hydrometer.linked_equipment_id)
+        return isinstance(linked, Ferminator) and linked.is_connected
 
     def _hydrometer(self) -> Hydrometer:
         return self._brewcreator_device

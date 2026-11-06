@@ -221,6 +221,11 @@ class Hydrometer(BrewCreatorEquipment, ABC):
         aware_time = copenhagen_time.replace(tzinfo=copenhagen_tz)
         return aware_time.astimezone(timezone.utc)
 
+    @property
+    def linked_equipment_id(self) -> str | None:
+        """ID of the equipment (e.g. Ferminator) relaying this hydrometer, if any."""
+        return self._json.get("equipmentId")
+
 
 class Tilt(Hydrometer):
     @property
