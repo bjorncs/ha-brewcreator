@@ -135,9 +135,10 @@ class WebSocketLoopTestCase(unittest.IsolatedAsyncioTestCase):
         ws = FakeWebSocket()
         await self.run_loop([ws], durations=[120])
         self.assertEqual(
+            # Every message ends with the record separator, or BrewCreator cancels the handshake
             [
-                '{"protocol":"json","version":1}',
-                '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}',
+                '{"protocol":"json","version":1}\x1e',
+                '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}\x1e',
             ],
             ws.sent,
         )

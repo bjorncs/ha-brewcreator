@@ -414,6 +414,14 @@ WebsocketMessageCallback = Callable[[dict[str, Any] | None], Awaitable[None]]
 """Called with None after every successful websocket connect, and with each SignalR invocation message."""
 
 
+async def _send_signalr(ws: aiohttp.ClientWebSocketResponse, message: str) -> None:
+    """Send a SignalR JSON message, terminated by the record separator.
+
+    BrewCreator waits for the separator, and cancels a handshake without one after 15 seconds.
+    """
+    await ws.send_str(message + SIGNALR_RECORD_SEPARATOR)
+
+
 def parse_signalr_frames(data: str) -> list[dict[str, Any]]:
     """Split a websocket text message into SignalR JSON messages, skipping any that can't be parsed."""
     messages = []
@@ -607,7 +615,7 @@ class BrewCreatorAPI:
             timeout=30,
             receive_timeout=None,
         ) as ws:
-            await ws.send_str('{"protocol":"json","version":1}')
+            await _send_signalr(ws, '{"protocol":"json","version":1}')
             handshake_response = await ws.receive()
             handshake_data = handshake_response.data
             if (
@@ -620,8 +628,8 @@ class BrewCreatorAPI:
                 )
                 connected_at = None
             else:
-                await ws.send_str(
-                    '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
+                await _send_signalr(
+                    ws, '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
                 )
                 _LOGGER.info("Successfully connected to %s", wss_host)
                 connected_at = monotonic()
@@ -680,7 +688,7 @@ class BrewCreatorAPI:
             await asyncio.sleep(10)
             try:
                 _LOGGER.debug("Sending WebSocket SignalR ping message")
-                await ws.send_str('{"type":6}')
+                await _send_signalr(ws, '{"type":6}')
             except (
                 asyncio.CancelledError,
                 ClientConnectionResetError,
