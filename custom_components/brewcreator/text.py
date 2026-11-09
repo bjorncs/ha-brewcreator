@@ -30,4 +30,4 @@ class FerminatorBatchNameEntity(FerminatorEntity, TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         await self._ferminator().set_batch_info(brew_name=value)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()

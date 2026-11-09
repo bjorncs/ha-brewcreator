@@ -2,14 +2,16 @@ from abc import ABC
 import asyncio
 from asyncio import Task
 import base64
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 import contextlib
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
+import json as _json
 import logging
 import re
 import secrets
+from time import monotonic
 from typing import Any, Protocol
 import zoneinfo
 
@@ -17,6 +19,26 @@ import aiohttp
 from aiohttp.client_exceptions import ClientConnectionResetError
 
 _LOGGER = logging.getLogger(__name__)
+
+# BrewCreator reports hydrometer activity times in Danish local time. Loaded once, as loading reads from disk.
+COPENHAGEN_TZ = zoneinfo.ZoneInfo("Europe/Copenhagen")
+
+# Equipment is listed in pages of this size, up to this many pages
+EQUIPMENT_PAGE_SIZE = 100
+EQUIPMENT_MAX_PAGES = 10
+
+# A specific gravity outside this range is not a plausible reading, e.g. dgrav=0.000 from an empty Tilt slot
+MIN_SPECIFIC_GRAVITY = 0.8
+# Above any real wort, with margin for badly calibrated hydrometers
+MAX_SPECIFIC_GRAVITY = 1.3
+
+# SignalR JSON protocol record separator, terminating every frame
+SIGNALR_RECORD_SEPARATOR = "\x1e"
+
+# A websocket connection closed by the server within this many seconds of connecting triggers a backoff
+WEBSOCKET_SHORT_CONNECTION_SECONDS = 10
+WEBSOCKET_MIN_BACKOFF_SECONDS = 2
+WEBSOCKET_MAX_BACKOFF_SECONDS = 60
 
 
 class FerminatorMode(Enum):
@@ -145,8 +167,11 @@ class BrewCreatorEquipment(ABC):
         return self._json["name"]
 
     @property
-    def last_activity_time(self) -> datetime:
-        return datetime.fromisoformat(self._json["lastActivityTime"])
+    def last_activity_time(self) -> datetime | None:
+        value = self._json.get("lastActivityTime")
+        if value is None:
+            return None
+        return datetime.fromisoformat(value)
 
     @property
     def is_logging_data(self) -> bool:
@@ -205,26 +230,31 @@ class BrewCreatorEquipment(ABC):
 class Hydrometer(BrewCreatorEquipment, ABC):
     @property
     def specific_gravity(self) -> float | None:
-        return self._json["sg"]
+        """Specific gravity, or None if missing or outside the plausible range 0.8-1.3."""
+        value = self._json.get("sg")
+        if value is None or not MIN_SPECIFIC_GRAVITY <= value <= MAX_SPECIFIC_GRAVITY:
+            return None
+        return value
 
     @property
     def abv(self) -> float:
         return self._json["abv"]
 
     @property
-    def last_activity_time(self) -> datetime:
+    def last_activity_time(self) -> datetime | None:
+        """Time of the newest brew log point, or None if no brew has been logged.
+
+        BrewCreator only updates it when a brew log point is written, not for every reading.
+        """
         # The last activity time reported from the Tilt is not UTC. It's been observed as CEST during daylight saving time,
         # while ISO-8601 string claims it's UTC. Assume it's Danish local time and convert to UTC.
         # This has only been observed for Tilt devices (not Ferminator), and is assumed to also apply to Graviator.
-        copenhagen_time = datetime.fromisoformat(self._json["lastActivityTime"])
-        copenhagen_tz = zoneinfo.ZoneInfo("Europe/Copenhagen")
-        aware_time = copenhagen_time.replace(tzinfo=copenhagen_tz)
+        value = self._json.get("lastActivityTime")
+        if value is None:
+            return None
+        copenhagen_time = datetime.fromisoformat(value)
+        aware_time = copenhagen_time.replace(tzinfo=COPENHAGEN_TZ)
         return aware_time.astimezone(timezone.utc)
-
-    @property
-    def linked_equipment_id(self) -> str | None:
-        """ID of the equipment (e.g. Ferminator) relaying this hydrometer, if any."""
-        return self._json.get("equipmentId")
 
 
 class Tilt(Hydrometer):
@@ -240,11 +270,12 @@ class Graviator(Hydrometer):
 class Ferminator(BrewCreatorEquipment):
     def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
         super().__init__(api, json)
-        self._connected_equipment_list: list[BrewCreatorEquipment] = []
+        self._linked_hydrometers: list[Hydrometer] = []
 
     @property
     def actual_temperature(self) -> float | None:
-        hydrometer = self.__connected_hydrometer
+        """Temperature from the linked hydrometer if it has a valid reading, else from the built-in probe."""
+        hydrometer = self.__linked_hydrometer_with_reading
         if hydrometer is not None:
             return hydrometer.actual_temperature
         return self._json["actualTemperature"]
@@ -263,7 +294,7 @@ class Ferminator(BrewCreatorEquipment):
 
     @property
     def mode(self) -> FerminatorMode | None:
-        l_process = self._json["lProcess"]
+        l_process = self._json.get("lProcess")
         if l_process is None:
             return None
         return FerminatorMode(l_process)
@@ -276,20 +307,31 @@ class Ferminator(BrewCreatorEquipment):
         return FerminatorStatus(l_status)
 
     @property
-    def sw_version(self) -> str:
-        return self._json["deviceTwinState"]["reportedSwVersion"]
+    def _device_twin(self) -> dict[str, Any]:
+        # Null for equipment that has never been online
+        return self._json.get("deviceTwinState") or {}
 
     @property
-    def hw_version(self) -> str:
-        return self._json["deviceTwinState"]["reportedHwVersion"]
+    def sw_version(self) -> str | None:
+        return self._device_twin.get("reportedSwVersion")
+
+    @property
+    def hw_version(self) -> str | None:
+        return self._device_twin.get("reportedHwVersion")
 
     @property
     def is_connected(self) -> bool:
-        return self._json["deviceTwinState"]["connectionState"] == "Connected"
+        return self._device_twin.get("connectionState") == "Connected"
 
     @property
-    def connected_equipment(self) -> list[BrewCreatorEquipment]:
-        return self._connected_equipment_list
+    def connected_equipment_ids(self) -> list[str]:
+        """IDs of the equipment this Ferminator lists as connected (connectedEquipments)."""
+        return self._json.get("connectedEquipments") or []
+
+    @property
+    def linked_hydrometers(self) -> list[Hydrometer]:
+        """Hydrometers linked to this Ferminator, as listed in its connectedEquipments."""
+        return self._linked_hydrometers
 
     async def set_fan_speed(self, fan_speed: int) -> bool:
         return await self._update_equipment({"fanSpeed": fan_speed})
@@ -301,19 +343,18 @@ class Ferminator(BrewCreatorEquipment):
         return await self._update_equipment({"isRegulatingTemperature": is_regulating})
 
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
-        self._connected_equipment_list = [
-            e for e in equipment if e.id in self._json["connectedEquipments"]
+        connected_ids = self.connected_equipment_ids
+        self._linked_hydrometers = [
+            e for e in equipment if isinstance(e, Hydrometer) and e.id in connected_ids
         ]
 
     @property
-    def __connected_hydrometer(self) -> Hydrometer | None:
+    def __linked_hydrometer_with_reading(self) -> Hydrometer | None:
         return next(
             (
                 e
-                for e in self.connected_equipment
-                if isinstance(e, Hydrometer)
-                and e.specific_gravity is not None
-                and e.actual_temperature is not None
+                for e in self.linked_hydrometers
+                if e.specific_gravity is not None and e.actual_temperature is not None
             ),
             None,
         )
@@ -325,6 +366,46 @@ class UnsupportedEquipment(BrewCreatorEquipment):
     @property
     def raw_type(self) -> str:
         return self._json["iotHubBrewEquipmentGroupId"]
+
+
+def linked_ferminator(
+    hydrometer: Hydrometer, equipment: Mapping[str, BrewCreatorEquipment]
+) -> Ferminator | None:
+    """Return the Ferminator the hydrometer is linked to, if any.
+
+    The Ferminator's connectedEquipments is the single source of truth for links. BrewCreator also stores the link
+    on the hydrometer (equipmentId), but it's unknown whether a Graviator sets it.
+    """
+    return next(
+        (
+            e
+            for e in equipment.values()
+            if isinstance(e, Ferminator) and hydrometer.id in e.connected_equipment_ids
+        ),
+        None,
+    )
+
+
+WebsocketMessageCallback = Callable[[dict[str, Any] | None], Awaitable[None]]
+"""Called with None after every successful websocket connect, and with each SignalR invocation message."""
+
+
+def parse_signalr_frames(data: str) -> list[dict[str, Any]]:
+    """Split a websocket text message into SignalR JSON messages, skipping any that can't be parsed."""
+    messages = []
+    for record in data.split(SIGNALR_RECORD_SEPARATOR):
+        if not record.strip():
+            continue
+        try:
+            message = _json.loads(record)
+        except ValueError:
+            _LOGGER.debug("Ignoring unparsable SignalR record: %s", record)
+            continue
+        if isinstance(message, dict):
+            messages.append(message)
+        else:
+            _LOGGER.debug("Ignoring unexpected SignalR record: %s", record)
+    return messages
 
 
 class TokenStorage(Protocol):
@@ -350,9 +431,7 @@ class BrewCreatorAPI:
         self.__password = password
         self.__own_session = session is None
         self.__session = session or aiohttp.ClientSession()
-        self.__update_callback: (
-            Callable[[dict[str, BrewCreatorEquipment]], Awaitable[None]] | None
-        ) = None
+        self.__message_callback: WebsocketMessageCallback | None = None
         self.__websocket_task: Task[Any] | None = None
         self.__websocket_ping_task: Task[Any] | None = None
         self.__token_storage = token_storage
@@ -373,27 +452,39 @@ class BrewCreatorAPI:
             await self.__set_tokens(result)
 
     async def list_equipment(self) -> dict[str, BrewCreatorEquipment]:
-        data = await self.equipment_json()
-        equipment_list = [
-            self.__get_equipment_from_json(e) for e in data["data"] if e is not None
-        ]
+        """List all equipment on the account, fetching every page."""
+        equipment_json = []
+        for page in range(1, EQUIPMENT_MAX_PAGES + 1):
+            data = await self.equipment_json(page)
+            equipment_json.extend(e for e in data["data"] if e is not None)
+            if not (data.get("metadata") or {}).get("hasNext"):
+                break
+        else:
+            # A partial list would make devices look removed
+            raise BrewCreatorError(
+                f"More than {EQUIPMENT_MAX_PAGES} pages of equipment"
+            )
+        equipment_list = [self.__get_equipment_from_json(e) for e in equipment_json]
         for e in filter(lambda x: isinstance(x, Ferminator), equipment_list):
             e._update_connected_equipment(equipment_list)
         return {e.id: e for e in equipment_list}
 
-    async def equipment_json(self) -> Any:
+    async def equipment_json(self, page: int = 1) -> Any:
         data = await self.__do_authenticated_request(
             "GET",
-            "/api/v1.0/equipments?PageSize=100&PageNumber=1&Logic=And&Filters=&Sorts=",
+            f"/api/v1.0/equipments?PageSize={EQUIPMENT_PAGE_SIZE}&PageNumber={page}&Logic=And&Filters=&Sorts=",
         )
         _LOGGER.debug("Equipment JSON: %s", data)
         return data
 
-    async def start_websocket(
-        self,
-        update_callback: Callable[[dict[str, BrewCreatorEquipment]], Awaitable[None]],
-    ) -> None:
-        self.__update_callback = update_callback
+    async def start_websocket(self, message_callback: WebsocketMessageCallback) -> None:
+        """Listen for telemetry in the background.
+
+        The callback is called with None after every successful connect, so the caller can refetch
+        state that changed while disconnected, and with each SignalR invocation message received.
+        It should return quickly, as messages are not received while it runs.
+        """
+        self.__message_callback = message_callback
         if (
             self.__websocket_task is None
             or self.__websocket_task.done()
@@ -440,19 +531,42 @@ class BrewCreatorAPI:
         return UnsupportedEquipment(self, equipment)
 
     async def __websocket_loop(self) -> None:
+        backoff_seconds = WEBSOCKET_MIN_BACKOFF_SECONDS
+        failing = False
         while True:
             try:
-                await self.__websocket_connect_and_listen()
+                connected_seconds = await self.__websocket_connect_and_listen()
             except asyncio.CancelledError:
                 _LOGGER.info(
                     "WebSocket listener stopped. Shutting down websocket task."
                 )
                 return
-            except Exception:
-                _LOGGER.exception("Unexpected error in WebSocket listener")
-                await asyncio.sleep(60)
+            except Exception as err:
+                # Only the first failure in a row gets a traceback, e.g. while the network is down
+                if failing:
+                    _LOGGER.warning("WebSocket connection failed: %s", err)
+                else:
+                    _LOGGER.exception("Unexpected error in WebSocket listener")
+                failing = True
+                connected_seconds = None
+            else:
+                failing = False
+            if (
+                connected_seconds is not None
+                and connected_seconds >= WEBSOCKET_SHORT_CONNECTION_SECONDS
+            ):
+                backoff_seconds = WEBSOCKET_MIN_BACKOFF_SECONDS
+                continue
+            # The server closed the connection straight away, the handshake failed, or connecting failed
+            _LOGGER.debug("Reconnecting WebSocket in %d seconds", backoff_seconds)
+            await asyncio.sleep(backoff_seconds)
+            backoff_seconds = min(backoff_seconds * 2, WEBSOCKET_MAX_BACKOFF_SECONDS)
 
-    async def __websocket_connect_and_listen(self):
+    async def __websocket_connect_and_listen(self) -> float | None:
+        """Connect and receive messages until the connection ends.
+
+        Returns how many seconds the connection lasted after a successful handshake, or None if the handshake failed.
+        """
         response = await self.__do_authenticated_request(
             "POST", "/telemetry/negotiate?negotiateVersion=1"
         )
@@ -467,52 +581,73 @@ class BrewCreatorAPI:
             timeout=30,
             receive_timeout=None,
         ) as ws:
-            await ws.send_str('{"protocol":"json","version":1}')
+            await ws.send_str('{"protocol":"json","version":1}')
             handshake_response = await ws.receive()
-            if handshake_response.data != "{}":
+            handshake_data = handshake_response.data
+            if (
+                not isinstance(handshake_data, str)
+                or handshake_data.strip(SIGNALR_RECORD_SEPARATOR) != "{}"
+            ):
                 _LOGGER.warning(
                     "Unexpected handshake response: '%s'. Connection will likely be closed by server",
-                    handshake_response.data,
+                    handshake_data,
                 )
+                connected_at = None
             else:
                 await ws.send_str(
-                    '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
+                    '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
                 )
                 _LOGGER.info("Successfully connected to %s", wss_host)
+                connected_at = monotonic()
+                # Refetch state, as anything may have changed while disconnected
+                await self.__message_callback(None)
             # Send text message every 10th second to keep connection alive in a separate task
-            if self.__websocket_ping_task is not None:
-                self.__websocket_ping_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.__websocket_ping_task
-                self.__websocket_ping_task = None
+            await self.__stop_websocket_ping()
             self.__websocket_ping_task = asyncio.create_task(
                 self.__websocket_signalr_ping(ws)
             )
-            async for msg in ws:  # type: aiohttp.WSMessage
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    if msg.data == '{"type":6}':
-                        _LOGGER.debug("Received WebSocket SignalR ping")
-                    elif msg.data.startswith('{"type":1'):
-                        _LOGGER.debug(
-                            "Received a message that will trigger a state update: %s",
-                            msg.data,
+            try:
+                async for msg in ws:  # type: aiohttp.WSMessage
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        await self.__handle_websocket_text(msg.data)
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        _LOGGER.error(
+                            "WebSocket failed with error: %s",
+                            ws.exception(),
                         )
-                        await self.__update_callback(await self.list_equipment())
+                        break
                     else:
-                        _LOGGER.debug("Received unexpected message: %s", msg.data)
-                elif msg.type == aiohttp.WSMsgType.CLOSED:
-                    _LOGGER.info("WebSocket connection closed")
-                    await asyncio.sleep(60)
-                    return
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    _LOGGER.error(
-                        "WebSocket failed with error: %s",
-                        ws.exception(),
-                    )
-                    await asyncio.sleep(60)
-                    return
-                else:
-                    _LOGGER.error("Unexpected WebSocket message type: %s", msg.type)
+                        _LOGGER.error("Unexpected WebSocket message type: %s", msg.type)
+            finally:
+                await self.__stop_websocket_ping()
+            # The iteration ends when the server closes the connection
+            _LOGGER.info("WebSocket connection closed")
+            if connected_at is None:
+                return None
+            return monotonic() - connected_at
+
+    async def __handle_websocket_text(self, data: str) -> None:
+        for message in parse_signalr_frames(data):
+            message_type = message.get("type")
+            if message_type == 6:
+                _LOGGER.debug("Received WebSocket SignalR ping")
+            elif message_type == 1:
+                _LOGGER.debug(
+                    "Received a message that will trigger a state update: %s",
+                    message,
+                )
+                await self.__message_callback(message)
+            elif message_type == 7:
+                _LOGGER.debug("Received WebSocket SignalR close: %s", message)
+            else:
+                _LOGGER.debug("Received unexpected message: %s", message)
+
+    async def __stop_websocket_ping(self) -> None:
+        if self.__websocket_ping_task is not None:
+            self.__websocket_ping_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.__websocket_ping_task
+            self.__websocket_ping_task = None
 
     async def __websocket_signalr_ping(self, ws: aiohttp.ClientWebSocketResponse):
         while True:

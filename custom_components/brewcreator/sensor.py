@@ -49,7 +49,7 @@ async def async_setup_entry(
         lambda coordinator, id: [
             HydrometerTemperatureEntity(coordinator, id),
             HydrometerSpecificGravityEntity(coordinator, id),
-            HydrometerLastActivityEntity(coordinator, id),
+            HydrometerLastBrewLogEntryEntity(coordinator, id),
             HydrometerAbvEntity(coordinator, id),
         ],
     )
@@ -83,13 +83,16 @@ class HydrometerTemperatureEntity(HydrometerSensorEntity):
         return self._hydrometer().actual_temperature
 
 
-class HydrometerLastActivityEntity(HydrometerSensorEntity):
+class HydrometerLastBrewLogEntryEntity(HydrometerSensorEntity):
+    """Time of the newest brew log point, which BrewCreator reports as the hydrometer's last activity."""
+
     def __init__(
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
     ) -> None:
-        super().__init__(coordinator, id, "Last Activity", "last_activity")
+        # The unique ID suffix is kept from when this was named "Last Activity", so the entity and its history stay
+        super().__init__(coordinator, id, "Last Brew Log Entry", "last_activity")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_entity_registry_enabled_default = False
@@ -101,7 +104,8 @@ class HydrometerLastActivityEntity(HydrometerSensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.native_value is not None
+        # Meaningful whether or not the hydrometer is linked
+        return self._equipment_available and self.native_value is not None
 
 
 class HydrometerSpecificGravityEntity(HydrometerSensorEntity):
@@ -164,7 +168,7 @@ class FerminatorLastActivityEntity(FerminatorSensorEntity):
 
     @property
     def available(self) -> bool:
-        return self.native_value is not None
+        return self._equipment_available and self.native_value is not None
 
 
 class FerminatorBrewDateEntity(FerminatorSensorEntity):

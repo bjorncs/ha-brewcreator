@@ -48,7 +48,7 @@ class FerminatorOriginalGravityEntity(FerminatorNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         await self._ferminator().set_batch_info(og=value)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class FerminatorFinalGravityEntity(FerminatorNumberEntity):
@@ -63,4 +63,4 @@ class FerminatorFinalGravityEntity(FerminatorNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         await self._ferminator().set_batch_info(fg=value)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()

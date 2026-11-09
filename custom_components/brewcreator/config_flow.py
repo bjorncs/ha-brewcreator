@@ -70,7 +70,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 class BrewCreatorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ferminator Connect."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -110,7 +110,7 @@ class BrewCreatorOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         ferminator = next(
-            (e for e in self.coordinator.data.values() if isinstance(e, Ferminator)),
+            (e for e in self.coordinator.data.equipment.values() if isinstance(e, Ferminator)),
             None,
         )
         if ferminator is None:
@@ -130,7 +130,7 @@ class BrewCreatorOptionsFlow(OptionsFlow):
                 beer_style=user_input[CONF_BATCH_INFO_BEER_STYLE],
                 is_logging_data=user_input[CONF_BATCH_INFO_STARTED],
             )
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
             return self.async_create_entry(title="Batch Info", data=user_input)
         batch_info = ferminator.batch_info
         is_started = ferminator.is_logging_data
