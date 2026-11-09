@@ -14,34 +14,87 @@
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "no_ferminator": "[%key:common::config_flow::abort::no_ferminator%]"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Batch",
-        "description": "Specify details about your batch",
-        "data": {
-          "batch_info_beer_style": "Style",
-          "batch_info_brew_name": "Batch Name",
-          "batch_info_ebc": "EBC",
-          "batch_info_fermentation_type": "Fermented",
-          "batch_info_fg": "FG",
-          "batch_info_ibu": "IBU",
-          "batch_info_og": "OG",
-          "batch_info_owner": "Brewer",
-          "batch_info_started": "Started",
-          "batch_info_volume": "Volume (L)"
-        }
-      }
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   },
   "issues": {
     "unsupported_equipment": {
       "title": "Unsupported BrewCreator device: {type}",
       "description": "The BrewCreator account has device(s) of type \"{type}\" ({names}) that this integration does not support yet. Other devices keep working. Please open an issue and attach the integration's diagnostics download so support can be added."
+    }
+  },
+  "services": {
+    "set_batch_info": {
+      "name": "Set batch info",
+      "description": "Changes the batch info of a Ferminator in BrewCreator, such as its name, gravities and whether the brew is started. Only the fields you give are changed. Give at least one.",
+      "fields": {
+        "device_id": {
+          "name": "Ferminator",
+          "description": "The Ferminator whose batch to change."
+        },
+        "batch_name": {
+          "name": "Batch name",
+          "description": "Name of the batch."
+        },
+        "owner": {
+          "name": "Owner",
+          "description": "The brewer of the batch."
+        },
+        "beer_style": {
+          "name": "Beer style",
+          "description": "Style of the beer, such as IPA or Scottish Export."
+        },
+        "original_gravity": {
+          "name": "Original gravity",
+          "description": "Specific gravity before fermentation, from 0.980 to 1.999. Must be above the final gravity."
+        },
+        "final_gravity": {
+          "name": "Final gravity",
+          "description": "Expected or measured specific gravity after fermentation, from 0.980 to 1.999. Must be below the original gravity."
+        },
+        "ebc": {
+          "name": "EBC",
+          "description": "Colour of the beer in EBC, a whole number of at least 1."
+        },
+        "ibu": {
+          "name": "IBU",
+          "description": "Bitterness in IBU, a whole number of at least 1."
+        },
+        "volume": {
+          "name": "Volume",
+          "description": "Batch volume in litres, a whole number of at least 1."
+        },
+        "fermentation_type": {
+          "name": "Fermentation type",
+          "description": "Top fermented (ale) or bottom fermented (lager)."
+        },
+        "started": {
+          "name": "Started",
+          "description": "Start (true) or stop (false) the brew. BrewCreator logs the brew's readings while it is started."
+        }
+      }
+    }
+  },
+  "selector": {
+    "fermentation_type": {
+      "options": {
+        "top": "Top",
+        "bottom": "Bottom"
+      }
+    }
+  },
+  "exceptions": {
+    "not_a_ferminator": {
+      "message": "Device {device_id} is not a Ferminator of a loaded BrewCreator integration."
+    },
+    "control_failed": {
+      "message": "Failed to change the temperature control of {name} in BrewCreator: {error}"
+    },
+    "final_gravity_not_below_original": {
+      "message": "The final gravity ({fg}) must be below the original gravity ({og}). Give both to change them together."
+    },
+    "update_failed": {
+      "message": "Failed to update the batch info of {name} in BrewCreator: {error}"
     }
   }
 }

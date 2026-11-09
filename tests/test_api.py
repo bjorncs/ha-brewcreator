@@ -46,8 +46,8 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_control_ferminator(self):
         equipments = await self.api.list_equipment()
         ferminator: Ferminator = next(e for e in equipments.values() if isinstance(e, Ferminator))
-        self.assertTrue(await ferminator.set_fan_speed(4))
-        self.assertTrue(await ferminator.set_target_temperature(1))
+        await ferminator.set_fan_speed(4)
+        await ferminator.set_target_temperature(1)
 
     async def test_websocket(self):
         await self.api.start_websocket(print_equipment)

@@ -1,0 +1,71 @@
+set_batch_info:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            integration: brewcreator
+            model: Ferminator
+    batch_name:
+      example: "Christmas Miracle"
+      selector:
+        text:
+    owner:
+      example: "Jane"
+      selector:
+        text:
+    beer_style:
+      example: "Scottish Export"
+      selector:
+        text:
+    original_gravity:
+      example: 1.058
+      selector:
+        number:
+          min: 0.98
+          max: 1.999
+          step: 0.001
+          mode: box
+    final_gravity:
+      example: 1.012
+      selector:
+        number:
+          min: 0.98
+          max: 1.999
+          step: 0.001
+          mode: box
+    ebc:
+      example: 34
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+          unit_of_measurement: EBC
+    ibu:
+      example: 26
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+          unit_of_measurement: IBU
+    volume:
+      example: 21
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+          unit_of_measurement: L
+    fermentation_type:
+      selector:
+        select:
+          translation_key: fermentation_type
+          options:
+            - top
+            - bottom
+    started:
+      selector:
+        boolean:

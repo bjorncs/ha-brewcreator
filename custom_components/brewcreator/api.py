@@ -199,7 +199,7 @@ class BrewCreatorEquipment(ABC):
         fermentation_type: FermentationType | None = None,
         beer_style: str | None = None,
         is_logging_data: bool | None = None,
-    ) -> bool:
+    ) -> None:
         options = {}
         if brew_name is not None:
             options["brewName"] = brew_name
@@ -221,10 +221,10 @@ class BrewCreatorEquipment(ABC):
             options["beerStyle"] = beer_style
         if is_logging_data is not None:
             options["isLoggingData"] = is_logging_data
-        return await self._update_equipment(options)
+        await self._update_equipment(options)
 
-    async def _update_equipment(self, json_payload: dict[str, any]) -> bool:
-        return await self._api._update_equipment_state(self.id, json_payload)
+    async def _update_equipment(self, json_payload: dict[str, any]) -> None:
+        await self._api._update_equipment_state(self.id, json_payload)
 
 
 class Hydrometer(BrewCreatorEquipment, ABC):
@@ -333,14 +333,14 @@ class Ferminator(BrewCreatorEquipment):
         """Hydrometers linked to this Ferminator, as listed in its connectedEquipments."""
         return self._linked_hydrometers
 
-    async def set_fan_speed(self, fan_speed: int) -> bool:
-        return await self._update_equipment({"fanSpeed": fan_speed})
+    async def set_fan_speed(self, fan_speed: int) -> None:
+        await self._update_equipment({"fanSpeed": fan_speed})
 
-    async def set_target_temperature(self, temperature: float) -> bool:
-        return await self._update_equipment({"setTemperature": temperature})
+    async def set_target_temperature(self, temperature: float) -> None:
+        await self._update_equipment({"setTemperature": temperature})
 
-    async def set_regulating_temperature(self, is_regulating: bool) -> bool:
-        return await self._update_equipment({"isRegulatingTemperature": is_regulating})
+    async def set_regulating_temperature(self, is_regulating: bool) -> None:
+        await self._update_equipment({"isRegulatingTemperature": is_regulating})
 
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
         connected_ids = self.connected_equipment_ids
@@ -503,11 +503,13 @@ class BrewCreatorAPI:
 
     async def _update_equipment_state(
         self, equipment_id: str, json_payload: dict[str, any]
-    ) -> bool:
+    ) -> None:
+        """Update equipment, raising BrewCreatorError if BrewCreator rejects the update."""
         json = await self.__do_authenticated_request(
             "PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload
         )
-        return json["succeeded"]
+        if not (json or {}).get("succeeded"):
+            raise BrewCreatorError(f"BrewCreator rejected the update of {equipment_id}")
 
     def __get_equipment_from_json(
         self, equipment: dict[str, any]

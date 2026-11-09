@@ -13,6 +13,26 @@ Monitor and control your devices in [BrewCreator](https://brewcreator.com) such 
 Several hydrometers can be registered on one BrewCreator account. Devices added to BrewCreator appear in
 Home Assistant automatically, without reloading the integration, and devices removed from BrewCreator are disabled.
 
+## Batch info
+A Ferminator's batch info (name, owner, beer style, OG, FG, EBC, IBU, volume, fermentation type and whether the
+brew is started) is shown as sensors and changed with the `brewcreator.set_batch_info` action. Only the fields you
+give are changed, so it works from the UI, scripts, automations and AI assistants that can call Home Assistant
+actions. For example, to start a new batch:
+
+```yaml
+action: brewcreator.set_batch_info
+data:
+  device_id: <your Ferminator's device ID>
+  batch_name: Christmas Miracle
+  beer_style: Scottish Export
+  original_gravity: 1.058
+  final_gravity: 1.015
+  started: true
+```
+
+The final gravity must be below the original gravity. Version 1.0.0 replaces the batch options dialog and the
+Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
+
 ## Installation
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
 - Use [HACS](https://www.hacs.xyz/docs/use/) to install the integration through the Home Assistant UI.

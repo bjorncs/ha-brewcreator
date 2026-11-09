@@ -1,4 +1,7 @@
+from collections.abc import Awaitable
 import logging
+
+import aiohttp
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -9,10 +12,12 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import BrewCreatorDataUpdateCoordinator
-from .api import FerminatorMode
+from .api import BrewCreatorError, FerminatorMode
+from .const import DOMAIN
 from .entity import FerminatorEntity, register_ferminator_entities
 
 FAN_SPEEDS = {1: "Low", 2: "Medium", 3: "High", 4: "Max"}
@@ -111,15 +116,27 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs) -> None:
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None:
-            await self._ferminator().set_target_temperature(temperature)
+            await self._async_update(self._ferminator().set_target_temperature(temperature))
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         fan_speed = next(k for k, v in FAN_SPEEDS.items() if v == fan_mode)
-        await self._ferminator().set_fan_speed(fan_speed)
+        await self._async_update(self._ferminator().set_fan_speed(fan_speed))
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         is_regulating = hvac_mode == HVACMode.HEAT_COOL
-        await self._ferminator().set_regulating_temperature(is_regulating)
+        await self._async_update(self._ferminator().set_regulating_temperature(is_regulating))
+
+    async def _async_update(self, update: Awaitable[None]) -> None:
+        """Send an update to BrewCreator, then refresh so the new state shows when the action returns."""
+        try:
+            await update
+        except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="control_failed",
+                translation_placeholders={"name": self._ferminator().name, "error": str(err)},
+            ) from err
+        await self.coordinator.async_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:

@@ -1,0 +1,7 @@
+{
+  "services": {
+    "set_batch_info": {
+      "service": "mdi:beer"
+    }
+  }
+}

@@ -16,8 +16,15 @@ def device(id: str, serial: str, manufacturer: str) -> SimpleNamespace:
     return ha_device(serial, id=id, name=id, manufacturer=manufacturer, serial_number=serial)
 
 
-def entity(unique_id: str, config_entry_id: str = "entry") -> SimpleNamespace:
-    return SimpleNamespace(unique_id=unique_id, config_entry_id=config_entry_id)
+def entity(
+    unique_id: str, config_entry_id: str = "entry", domain: str = "sensor"
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        unique_id=unique_id,
+        config_entry_id=config_entry_id,
+        domain=domain,
+        entity_id=f"{domain}.{unique_id}",
+    )
 
 
 @patch("custom_components.brewcreator.er")
@@ -30,6 +37,9 @@ class MigrationTestCase(unittest.TestCase):
                 device_id, []
             )
         )
+        er.async_entries_for_config_entry.return_value = [
+            e for entities in entities_by_device.values() for e in entities
+        ]
         hass = MagicMock()
         entry = SimpleNamespace(entry_id="entry", version=version)
         result = asyncio.run(async_migrate_entry(hass, entry))
@@ -47,7 +57,7 @@ class MigrationTestCase(unittest.TestCase):
                 "dev-f": [
                     # The climate entity has an empty suffix
                     entity(f"brewcreator_{FERMINATOR_ID}_"),
-                    entity(f"brewcreator_{FERMINATOR_ID}_original_gravity"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_original_gravity", domain="number"),
                 ],
                 "dev-t": [
                     entity(f"brewcreator_{TILT_ID}_sg"),
@@ -67,8 +77,32 @@ class MigrationTestCase(unittest.TestCase):
         self.assertEqual(2, registry.async_update_device.call_count)
         hass.config_entries.async_update_entry.assert_called_once()
         self.assertEqual(
-            {"version": 2}, hass.config_entries.async_update_entry.call_args.kwargs
+            {"version": 2, "options": {}},
+            hass.config_entries.async_update_entry.call_args.kwargs,
         )
+        # The original gravity number is replaced by a sensor
+        er.async_get.return_value.async_remove.assert_called_once_with(
+            f"number.brewcreator_{FERMINATOR_ID}_original_gravity"
+        )
+
+    def test_equipment_id_shared_by_two_devices_goes_to_the_first(self, dr, er):
+        with self.assertLogs("custom_components.brewcreator", "WARNING"):
+            result, _, registry = self.migrate(
+                dr,
+                er,
+                [device("dev-t1", "oyc0gb", "Tilt"), device("dev-t2", "x81kqa", "Tilt")],
+                {
+                    "dev-t1": [entity(f"brewcreator_{TILT_ID}_sg")],
+                    "dev-t2": [entity(f"brewcreator_{TILT_ID}_temp")],
+                },
+            )
+        self.assertTrue(result)
+        registry.async_update_device.assert_any_call(
+            "dev-t1", new_identifiers={("brewcreator", TILT_ID)}, serial_number=None
+        )
+        # The second device keeps its old identifiers, as the registry refuses an identifier used twice
+        registry.async_update_device.assert_any_call("dev-t2", serial_number=None)
+        self.assertEqual(2, registry.async_update_device.call_count)
 
     def test_device_without_entities_keeps_its_identifiers(self, dr, er):
         result, hass, registry = self.migrate(
@@ -95,9 +129,51 @@ class MigrationTestCase(unittest.TestCase):
             "dev-f", new_identifiers={("brewcreator", FERMINATOR_ID)}
         )
 
-    def test_current_version_is_not_migrated(self, dr, er):
-        result, hass, registry = self.migrate(dr, er, [], {}, version=2)
+    def test_batch_controls_and_options_are_removed(self, dr, er):
+        result, hass, _ = self.migrate(
+            dr,
+            er,
+            [],
+            {
+                "dev-f": [
+                    entity(f"brewcreator_{FERMINATOR_ID}_", domain="climate"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_batch", domain="switch"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_batch_name", domain="text"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_original_gravity", domain="number"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_final_gravity", domain="number"),
+                    entity(f"brewcreator_{FERMINATOR_ID}_owner", domain="sensor"),
+                ]
+            },
+        )
         self.assertTrue(result)
+        removed = {
+            c.args[0] for c in er.async_get.return_value.async_remove.call_args_list
+        }
+        self.assertEqual(
+            {
+                f"switch.brewcreator_{FERMINATOR_ID}_batch",
+                f"text.brewcreator_{FERMINATOR_ID}_batch_name",
+                f"number.brewcreator_{FERMINATOR_ID}_original_gravity",
+                f"number.brewcreator_{FERMINATOR_ID}_final_gravity",
+            },
+            removed,
+        )
+        self.assertEqual(
+            {"version": 2, "options": {}},
+            hass.config_entries.async_update_entry.call_args.kwargs,
+        )
+
+    def test_current_version_is_not_migrated(self, dr, er):
+        result, hass, registry = self.migrate(
+            dr,
+            er,
+            [],
+            {"dev-f": [entity(f"brewcreator_{FERMINATOR_ID}_batch", domain="binary_sensor")]},
+            version=2,
+        )
+        self.assertTrue(result)
+        registry.async_update_device.assert_not_called()
+        er.async_get.return_value.async_remove.assert_not_called()
         hass.config_entries.async_update_entry.assert_not_called()
 
     def test_future_version_is_refused(self, dr, er):

@@ -1,12 +1,29 @@
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from custom_components.brewcreator.api import (
+    BrewCreatorAPI,
+    BrewCreatorError,
     Ferminator,
     parse_signalr_frames,
 )
 from tests.factories import tilt
+
+
+class UpdateEquipmentStateTestCase(unittest.IsolatedAsyncioTestCase):
+    def api(self, response) -> BrewCreatorAPI:
+        api = BrewCreatorAPI("user", "pass", MagicMock(), MagicMock())
+        api._BrewCreatorAPI__do_authenticated_request = AsyncMock(return_value=response)
+        return api
+
+    async def test_accepted_update(self):
+        await self.api({"succeeded": True, "data": {}})._update_equipment_state("f", {"fanSpeed": 2})
+
+    async def test_rejected_update_raises(self):
+        for response in ({"succeeded": False}, {}, None):
+            with self.subTest(response=response), self.assertRaises(BrewCreatorError):
+                await self.api(response)._update_equipment_state("f", {"fanSpeed": 2})
 
 
 class NullDeviceTwinTestCase(unittest.TestCase):
