@@ -3,5 +3,12 @@
     "set_batch_info": {
       "service": "mdi:beer"
     }
+  },
+  "entity": {
+    "select": {
+      "hydrometer": {
+        "default": "mdi:link-variant"
+      }
+    }
   }
 }

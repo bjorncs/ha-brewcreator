@@ -24,6 +24,7 @@ from .token_store import BrewCreatorTokenStore
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.CLIMATE,
+    Platform.SELECT,
     Platform.SENSOR,
 ]
 

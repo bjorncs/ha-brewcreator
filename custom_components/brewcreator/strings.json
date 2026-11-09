@@ -95,6 +95,18 @@
     },
     "update_failed": {
       "message": "Failed to update the batch info of {name} in BrewCreator: {error}"
+    },
+    "link_failed": {
+      "message": "Failed to change the hydrometer linked to {name} in BrewCreator: {error}"
+    }
+  },
+  "entity": {
+    "select": {
+      "hydrometer": {
+        "state": {
+          "none": "None"
+        }
+      }
     }
   }
 }

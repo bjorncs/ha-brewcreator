@@ -13,6 +13,9 @@ Monitor and control your devices in [BrewCreator](https://brewcreator.com) such 
 Several hydrometers can be registered on one BrewCreator account. Devices added to BrewCreator appear in
 Home Assistant automatically, without reloading the integration, and devices removed from BrewCreator are disabled.
 
+A Ferminator's Hydrometer select changes which Tilt or Graviator is linked to it, like Connect Device in the
+BrewCreator web app.
+
 ## Batch info
 A Ferminator's batch info (name, owner, beer style, OG, FG, EBC, IBU, volume, fermentation type and whether the
 brew is started) is shown as sensors and changed with the `brewcreator.set_batch_info` action. Only the fields you

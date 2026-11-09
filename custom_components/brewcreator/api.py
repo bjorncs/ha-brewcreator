@@ -342,6 +342,15 @@ class Ferminator(BrewCreatorEquipment):
     async def set_regulating_temperature(self, is_regulating: bool) -> None:
         await self._update_equipment({"isRegulatingTemperature": is_regulating})
 
+    async def link_hydrometer(self, hydrometer: Hydrometer | None) -> None:
+        """Link a hydrometer to this Ferminator in place of the current one, or unlink it with None.
+
+        BrewCreator moves the link on both sides and copies the Ferminator's batch info to the newly linked hydrometer.
+        """
+        await self._update_equipment(
+            {"connectedEquipments": [hydrometer.id] if hydrometer is not None else []}
+        )
+
     def _update_connected_equipment(self, equipment: list[BrewCreatorEquipment]):
         connected_ids = self.connected_equipment_ids
         self._linked_hydrometers = [
@@ -383,6 +392,21 @@ def linked_ferminator(
             if isinstance(e, Ferminator) and hydrometer.id in e.connected_equipment_ids
         ),
         None,
+    )
+
+
+def linkable_hydrometers(
+    ferminator: Ferminator, equipment: Mapping[str, BrewCreatorEquipment]
+) -> list[Hydrometer]:
+    """Return the hydrometers the Ferminator can link to, ordered by name: those not linked to another Ferminator."""
+    return sorted(
+        (
+            e
+            for e in equipment.values()
+            if isinstance(e, Hydrometer)
+            and linked_ferminator(e, equipment) in (None, ferminator)
+        ),
+        key=lambda h: (h.name, h.id),
     )
 
 
