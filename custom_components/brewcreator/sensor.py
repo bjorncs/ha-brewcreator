@@ -33,6 +33,7 @@ async def async_setup_entry(
         entry,
         async_add_entities,
         lambda coordinator, id: [
+            FerminatorProbeTemperatureEntity(coordinator, id),
             FerminatorLastActivityEntity(coordinator, id),
             FerminatorBrewDateEntity(coordinator, id),
             FerminatorBatchNameEntity(coordinator, id),
@@ -78,7 +79,7 @@ class HydrometerTemperatureEntity(HydrometerSensorEntity):
         super().__init__(coordinator, id, "Temperature", "temp")
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        self._attr_suggested_display_precision = 0
+        self._attr_suggested_display_precision = 1
         self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
@@ -151,6 +152,28 @@ class FerminatorSensorEntity(FerminatorEntity, SensorEntity, ABC):
         unique_id_suffix: str,
     ):
         super().__init__(coordinator, id, name, unique_id_suffix)
+
+
+class FerminatorProbeTemperatureEntity(FerminatorSensorEntity):
+    """Temperature from the Ferminator's built-in probe.
+
+    The climate entity reports the linked hydrometer's temperature instead when it has a reading.
+    """
+
+    def __init__(
+        self,
+        coordinator: BrewCreatorDataUpdateCoordinator,
+        id: str,
+    ) -> None:
+        super().__init__(coordinator, id, "Built-in Probe Temperature", "probe_temp")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_suggested_display_precision = 1
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        return self._ferminator().actual_temperature_builtin_probe
 
 
 class FerminatorLastActivityEntity(FerminatorSensorEntity):

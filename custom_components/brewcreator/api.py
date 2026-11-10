@@ -281,7 +281,8 @@ class Ferminator(BrewCreatorEquipment):
         return self._json["actualTemperature"]
 
     @property
-    def actual_temperature_builtin_probe(self):
+    def actual_temperature_builtin_probe(self) -> float | None:
+        """Temperature from the Ferminator's built-in probe, whether or not a hydrometer is linked."""
         return self._json["actualTemperature"]
 
     @property
