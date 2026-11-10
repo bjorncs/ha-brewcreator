@@ -320,8 +320,8 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
         "Changes the batch info of a BrewCreator Ferminator: batch name, owner, beer style, gravities, colour, "
         "bitterness, volume, fermentation type, and whether BrewCreator logs the brew. Only the given fields are "
         "changed. Give at least one. It doesn't control the Ferminator itself: to turn temperature regulation on or "
-        "off, or change the target temperature or fan speed, control the Ferminator's Temperature Control climate "
-        "entity, for example with HassTurnOn, HassTurnOff or HassClimateSetTemperature."
+        "off, or change the target temperature or fan speed, control the Ferminator's climate entity, "
+        "for example with HassTurnOn, HassTurnOff or HassClimateSetTemperature."
     )
     platforms = None
 

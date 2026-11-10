@@ -16,8 +16,8 @@ Home Assistant automatically, without reloading the integration, and devices rem
 A Ferminator's Hydrometer select changes which Tilt or Graviator is linked to it, like Connect Device in the
 BrewCreator web app.
 
-A Ferminator's Temperature Control entity reports the linked hydrometer's temperature when it has a reading, and the
-Ferminator's built-in probe otherwise. The Built-in Probe Temperature sensor always shows the probe.
+A Ferminator's climate entity reports the linked hydrometer's temperature when it has a reading, and the
+Ferminator's built-in probe otherwise. The Built-in probe temperature sensor always shows the probe.
 
 ## Batch info
 A Ferminator's batch info (name, owner, beer style, OG, FG, EBC, IBU, volume, fermentation type and whether the
@@ -53,7 +53,7 @@ The tools are the intents `BrewCreatorGetFermentationStatus`, `BrewCreatorSetBat
 `BrewCreatorLinkHydrometer`, which can also be handled through Home Assistant's intent API.
 
 An agent only sees Ferminators and hydrometers that have at least one entity exposed to Assist. The
-Ferminator's Temperature Control is exposed by default. To expose the others, go to *Settings → Voice assistants →
+Ferminator's climate entity is exposed by default. To expose the others, go to *Settings → Voice assistants →
 Expose*. The built-in intents also work on that climate entity, for example "set the Ferminator to 12 degrees".
 Example prompts:
 
@@ -87,13 +87,13 @@ hydrometer's Temperature sensor with:
   holds steady for longer than the max age leaves the helper unknown, and the blueprint waits until it changes.
 
 Then select the helper as the blueprint's *Beer temperature*. If you leave it empty, the blueprint uses the
-Temperature Control entity's current temperature as is.
+Ferminator climate entity's current temperature as is.
 
 ### Inputs
 | Input | Default | Description |
 |---|---|---|
-| Ferminator | | The Ferminator's Temperature Control entity. |
-| Beer temperature | *(none)* | The smoothed beer temperature. Empty uses the Temperature Control entity's current temperature. |
+| Ferminator | | The Ferminator's climate entity. |
+| Beer temperature | *(none)* | The smoothed beer temperature. Empty uses the climate entity's current temperature. |
 | Off threshold | 0.5 | Turn regulation off when the beer is at most this far from the target. |
 | On threshold | 1.0 | Turn regulation on when the beer is at least this far from the target. Must be larger than the off threshold. |
 

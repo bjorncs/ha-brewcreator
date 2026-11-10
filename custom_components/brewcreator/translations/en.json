@@ -101,11 +101,79 @@
         }
     },
     "entity": {
+        "binary_sensor": {
+            "batch_started": {
+                "name": "Batch started"
+            }
+        },
+        "climate": {
+            "ferminator": {
+                "state_attributes": {
+                    "fan_mode": {
+                        "state": {
+                            "max": "Max"
+                        }
+                    }
+                }
+            }
+        },
         "select": {
             "hydrometer": {
+                "name": "Hydrometer",
                 "state": {
                     "none": "None"
                 }
+            }
+        },
+        "sensor": {
+            "specific_gravity": {
+                "name": "Specific gravity"
+            },
+            "abv": {
+                "name": "ABV"
+            },
+            "last_brew_log_entry": {
+                "name": "Last brew log entry"
+            },
+            "probe_temperature": {
+                "name": "Built-in probe temperature"
+            },
+            "last_activity": {
+                "name": "Last activity"
+            },
+            "brew_date": {
+                "name": "Brew start date"
+            },
+            "owner": {
+                "name": "Owner"
+            },
+            "ebc": {
+                "name": "EBC"
+            },
+            "ibu": {
+                "name": "IBU"
+            },
+            "batch_volume": {
+                "name": "Batch volume"
+            },
+            "fermentation_type": {
+                "name": "Fermentation type",
+                "state": {
+                    "top": "Top",
+                    "bottom": "Bottom"
+                }
+            },
+            "beer_style": {
+                "name": "Beer style"
+            },
+            "batch_name": {
+                "name": "Batch name"
+            },
+            "original_gravity": {
+                "name": "Original gravity"
+            },
+            "final_gravity": {
+                "name": "Final gravity"
             }
         }
     }

@@ -46,19 +46,20 @@ class BrewCreatorEntity(CoordinatorEntity[BrewCreatorDataUpdateCoordinator], ABC
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
-        name: str,
+        translation_key: str | None,
         unique_id_suffix: str,
     ):
         super().__init__(coordinator)
         self._brewcreator_id = id
         self._attr_has_entity_name = True
-        self._attr_name = name
+        # The name comes from the translation key, or from the device class when it has none
+        self._attr_translation_key = translation_key
         self._attr_unique_id = entity_unique_id(id, unique_id_suffix)
         _LOGGER.debug(
-            "Creating entity (id=%s, class=%s, name=%s)",
+            "Creating entity (id=%s, class=%s, translation_key=%s)",
             self._attr_unique_id,
             self.__class__.__name__,
-            name,
+            translation_key,
         )
 
     @property
@@ -83,10 +84,10 @@ class HydrometerEntity(BrewCreatorEntity, ABC):
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
-        name: str,
+        translation_key: str | None,
         unique_id_suffix: str,
     ):
-        super().__init__(coordinator, id, name, unique_id_suffix)
+        super().__init__(coordinator, id, translation_key, unique_id_suffix)
         self._attr_device_info = device_info(self._hydrometer())
 
     @property
@@ -120,10 +121,10 @@ class FerminatorEntity(BrewCreatorEntity, ABC):
         self,
         coordinator: BrewCreatorDataUpdateCoordinator,
         id: str,
-        name: str,
+        translation_key: str | None,
         unique_id_suffix: str,
     ):
-        super().__init__(coordinator, id, name, unique_id_suffix)
+        super().__init__(coordinator, id, translation_key, unique_id_suffix)
         self._attr_device_info = device_info(self._ferminator())
 
     @property

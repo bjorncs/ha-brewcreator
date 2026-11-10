@@ -25,7 +25,7 @@ blueprint:
   input:
     climate_entity:
       name: Ferminator
-      description: The Ferminator's Temperature Control entity.
+      description: The Ferminator's climate entity.
       selector:
         entity:
           filter:

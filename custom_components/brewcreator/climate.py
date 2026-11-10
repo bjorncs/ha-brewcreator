@@ -4,6 +4,9 @@ import logging
 import aiohttp
 
 from homeassistant.components.climate import (
+    FAN_HIGH,
+    FAN_LOW,
+    FAN_MEDIUM,
     ClimateEntity,
     ClimateEntityFeature,
     HVACAction,
@@ -20,7 +23,7 @@ from .api import BrewCreatorError, FerminatorMode
 from .const import DOMAIN
 from .entity import FerminatorEntity, register_ferminator_entities
 
-FAN_SPEEDS = {1: "Low", 2: "Medium", 3: "High", 4: "Max"}
+FAN_SPEEDS = {1: FAN_LOW, 2: FAN_MEDIUM, 3: FAN_HIGH, 4: "max"}
 MODE_TO_HVAC_ACTION = {
     FerminatorMode.READY: HVACAction.OFF,
     FerminatorMode.COOLING: HVACAction.COOLING,
@@ -45,7 +48,9 @@ async def async_setup_entry(
 
 class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
-        super().__init__(coordinator, id, "Temperature Control", "")
+        super().__init__(coordinator, id, "ferminator", "")
+        # The main feature of the Ferminator, so it takes the device's name
+        self._attr_name = None
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.FAN_MODE

@@ -61,10 +61,8 @@ class FerminatorHydrometerEntity(FerminatorEntity, SelectEntity):
     """
 
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
-        super().__init__(coordinator, id, "Hydrometer", "hydrometer")
+        super().__init__(coordinator, id, "hydrometer", "hydrometer")
         self._attr_entity_category = EntityCategory.CONFIG
-        # Translates the "none" option
-        self._attr_translation_key = "hydrometer"
 
     def _hydrometers_by_option(self) -> dict[str, Hydrometer]:
         # capability_attributes reads the options even while the entity is unavailable, e.g. once the Ferminator is

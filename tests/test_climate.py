@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.climate import HVACAction, HVACMode
+from homeassistant.components.climate import FAN_HIGH, FAN_LOW, FAN_MEDIUM, HVACAction, HVACMode
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.brewcreator.api import BrewCreatorError
@@ -15,6 +15,18 @@ def climate(**extra) -> FerminatorConnectClimate:
     f = ferminator(**extra)
     coordinator.data = BrewCreatorData(equipment={f.id: f})
     return FerminatorConnectClimate(coordinator, f.id)
+
+
+class ClimateNamingTestCase(unittest.TestCase):
+    def test_takes_the_device_name(self):
+        entity = climate()
+        self.assertIsNone(entity.name)
+        self.assertEqual("ferminator", entity.translation_key)
+
+    def test_fan_modes_are_translation_keys(self):
+        entity = climate(fanSpeed=4)
+        self.assertEqual([FAN_LOW, FAN_MEDIUM, FAN_HIGH, "max"], entity.fan_modes)
+        self.assertEqual("max", entity.fan_mode)
 
 
 class ClimateModeTestCase(unittest.TestCase):
@@ -47,6 +59,12 @@ class ClimateControlTestCase(unittest.IsolatedAsyncioTestCase):
         await entity.async_set_temperature(temperature=18.5)
         update.assert_awaited_once_with("f", {"setTemperature": 18.5})
         entity.coordinator.async_refresh.assert_awaited_once()
+
+    async def test_fan_mode_is_sent_as_fan_speed(self):
+        update = AsyncMock()
+        entity = self.climate(update)
+        await entity.async_set_fan_mode(FAN_HIGH)
+        update.assert_awaited_once_with("f", {"fanSpeed": 3})
 
     async def test_rejected_update_raises_home_assistant_error(self):
         entity = self.climate(AsyncMock(side_effect=BrewCreatorError("rejected")))

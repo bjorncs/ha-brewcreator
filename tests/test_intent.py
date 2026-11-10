@@ -141,7 +141,7 @@ class FermentationStatusTestCase(IntentTestCase):
                 self.setup(ferminator("f", lProcess=l_process, fanSpeed=2))
                 status = self.status().speech_slots["ferminator"]
                 self.assertEqual(regulating, status["temperature_regulation"])
-                self.assertEqual("Medium", status["fan_speed"])
+                self.assertEqual("medium", status["fan_speed"])
 
     def test_unknown_mode_leaves_out_temperature_regulation(self):
         self.setup(ferminator("f", lProcess=None))

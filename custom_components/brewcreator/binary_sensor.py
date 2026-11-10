@@ -28,7 +28,7 @@ class FerminatorBatchStartedEntity(FerminatorEntity, BinarySensorEntity):
     """Whether the brew is started, so BrewCreator logs its readings. Changed with the set_batch_info action."""
 
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
-        super().__init__(coordinator, id, "Batch Started", "batch")
+        super().__init__(coordinator, id, "batch_started", "batch")
         self._attr_device_class = BinarySensorDeviceClass.RUNNING
 
     @property

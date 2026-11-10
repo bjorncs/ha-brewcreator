@@ -11,6 +11,7 @@ from custom_components.brewcreator.binary_sensor import FerminatorBatchStartedEn
 from custom_components.brewcreator.coordinator import BrewCreatorData
 from custom_components.brewcreator.sensor import (
     FerminatorBatchNameEntity,
+    FerminatorFermentationTypeEntity,
     FerminatorFinalGravityEntity,
     FerminatorOriginalGravityEntity,
 )
@@ -204,6 +205,15 @@ class BatchSensorTestCase(unittest.TestCase):
         self.assertEqual(1.058, og.native_value)
         self.assertEqual(1.015, fg.native_value)
         self.assertTrue(started.is_on)
+
+    def test_fermentation_type_is_a_translation_key(self):
+        coordinator = MagicMock()
+        f = batch_ferminator()
+        coordinator.data = BrewCreatorData(equipment={f.id: f})
+        entity = FerminatorFermentationTypeEntity(coordinator, f.id)
+        self.assertEqual(["top", "bottom"], entity.options)
+        self.assertEqual("top", entity.native_value)
+        self.assertEqual("fermentation_type", entity.translation_key)
 
     def test_without_batch(self):
         name, og, fg, started = self.entities(
