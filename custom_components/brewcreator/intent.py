@@ -1,14 +1,15 @@
 """Intents of the BrewCreator integration.
 
-Home Assistant offers every intent with a description and slot schema as a tool to LLM conversation agents through
-the Assist API, and to MCP clients through the MCP Server integration. These intents give those agents what the
-built-in intents don't: a summary of a brew, the batch info and the hydrometer linked to a Ferminator.
+The LLM tools platform (llm.py) offers these intents as tools to LLM conversation agents through the Assist API, and
+to MCP clients through the MCP Server integration; a new intent only becomes a tool once it is added to
+llm.LLM_INTENTS. The intents give those agents what the built-in intents don't: a summary of a brew, the batch info and
+the hydrometer linked to a Ferminator.
 
 An intent only sees equipment whose device has an entity exposed to the assistant asking, such as the Ferminator's
 climate entity.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -90,18 +91,21 @@ class _Target:
         return {" ".join(n.casefold().split()) for n in (device_name(self.device), self.equipment.name) if n}
 
 
-def _exposed_targets(hass: HomeAssistant, assistant: str | None) -> list[_Target]:
-    """Return the Ferminators and hydrometers whose device has an entity exposed to the assistant, by name.
+def _iter_exposed(
+    hass: HomeAssistant,
+    assistant: str | None,
+    equipment_type: type[BrewCreatorEquipment] | tuple[type[BrewCreatorEquipment], ...] = (Ferminator, Hydrometer),
+) -> Iterator[_Target]:
+    """Yield the equipment of the type whose device has an entity exposed to the assistant.
 
-    Without an assistant, as when an intent is handled through the intent API, all of them are returned.
+    Without an assistant, as when an intent is handled through the intent API, all of it is yielded.
     """
     device_registry = dr.async_get(hass)
     entity_registry = er.async_get(hass)
-    targets = []
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data
         for equipment in coordinator.data.equipment.values():
-            if not isinstance(equipment, (Ferminator, Hydrometer)):
+            if not isinstance(equipment, equipment_type):
                 continue
             device = find_device(device_registry, equipment.id, entry.entry_id)
             if device is None or device.disabled_by is not None:
@@ -111,8 +115,19 @@ def _exposed_targets(hass: HomeAssistant, assistant: str | None) -> list[_Target
                 for entity in er.async_entries_for_device(entity_registry, device.id)
             ):
                 continue
-            targets.append(_Target(coordinator, equipment, device))
-    return sorted(targets, key=lambda t: t.name.casefold())
+            yield _Target(coordinator, equipment, device)
+
+
+def _exposed_targets(hass: HomeAssistant, assistant: str | None) -> list[_Target]:
+    """Return the Ferminators and hydrometers exposed to the assistant, by name."""
+    return sorted(_iter_exposed(hass, assistant), key=lambda t: t.name.casefold())
+
+
+def has_exposed(
+    hass: HomeAssistant, assistant: str | None, equipment_type: type[BrewCreatorEquipment]
+) -> bool:
+    """Return whether any equipment of the type is exposed to the assistant, stopping at the first."""
+    return next(_iter_exposed(hass, assistant, equipment_type), None) is not None
 
 
 def _of_type(targets: list[_Target], equipment_type: type[BrewCreatorEquipment]) -> list[_Target]:

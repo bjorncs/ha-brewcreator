@@ -1,3 +1,4 @@
 {
-  "name": "BrewCreator"
+  "name": "BrewCreator",
+  "homeassistant": "2026.11.0"
 }

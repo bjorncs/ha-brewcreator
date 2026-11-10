@@ -40,14 +40,17 @@ The final gravity must be below the original gravity. Version 1.0.0 replaces the
 Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
 
 ## Assist and AI assistants
-The integration adds intents that LLM conversation agents (OpenAI, Anthropic, Ollama, …) get as tools when
-they use the Assist API. MCP clients get them too, through Home Assistant's MCP Server integration:
+The integration gives LLM conversation agents (Google Gemini, OpenAI, Anthropic, Ollama, …) tools when they use the
+Assist API (*Device control*). MCP clients get them too, through Home Assistant's MCP Server integration:
 
 | Tool | What it does |
 |------|--------------|
-| `BrewCreatorGetFermentationStatus` | Batch info, temperatures, specific gravity, ABV and days fermenting of a Ferminator or hydrometer |
-| `BrewCreatorSetBatchInfo` | Changes the batch info, like the `brewcreator.set_batch_info` action |
-| `BrewCreatorLinkHydrometer` | Links a hydrometer to a Ferminator, or unlinks it |
+| `brewcreator__GetFermentationStatus` | Batch info, temperatures, specific gravity, ABV and days fermenting of a Ferminator or hydrometer |
+| `brewcreator__SetBatchInfo` | Changes the batch info, like the `brewcreator.set_batch_info` action |
+| `brewcreator__LinkHydrometer` | Links a hydrometer to a Ferminator, or unlinks it |
+
+The tools are the intents `BrewCreatorGetFermentationStatus`, `BrewCreatorSetBatchInfo` and
+`BrewCreatorLinkHydrometer`, which can also be handled through Home Assistant's intent API.
 
 An agent only sees Ferminators and hydrometers that have at least one entity exposed to Assist. The
 Ferminator's Temperature Control is exposed by default. To expose the others, go to *Settings → Voice assistants →
@@ -109,6 +112,8 @@ regulation alone and logs a warning.
   turns regulation on, and the Ferminator regulates on its built-in probe.
 
 ## Installation
+The integration needs Home Assistant 2026.11 or later.
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
 - Use [HACS](https://www.hacs.xyz/docs/use/) to install the integration through the Home Assistant UI.
   Select [Custom Repositories](https://www.hacs.xyz/docs/faq/custom_repositories/) and use repository `bjorncs/ha-brewcreator` with type `Integration`.
@@ -126,6 +131,17 @@ To fix it, register the Tilt in BrewCreator, then link it with the Ferminator's 
 Feel free to make an issue or a pull request.
 Please attach [diagnostics output](https://www.home-assistant.io/docs/configuration/troubleshooting/#download-diagnostics) and relevant log if you're reporting an issue (make sure to
 [enable debug logging](https://www.home-assistant.io/docs/configuration/troubleshooting/#enabling-debug-logging) prior to dumping the log).
+
+### Development
+The tests run against the Home Assistant version in `requirements.txt`:
+
+```bash
+uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m unittest tests/test_*.py
+```
+
+`tests/test_api.py` runs against the BrewCreator cloud, and is skipped unless `BREWCREATOR_USERNAME` and
+`BREWCREATOR_PASSWORD` are set.
 
 # License
 This work is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.

@@ -32,7 +32,7 @@ class MyTestCase(unittest.IsolatedAsyncioTestCase):
         username = os.getenv("BREWCREATOR_USERNAME")
         password = os.getenv("BREWCREATOR_PASSWORD")
         if not username or not password:
-            raise ValueError("BREWCREATOR_USERNAME and BREWCREATOR_PASSWORD must be set")
+            self.skipTest("BREWCREATOR_USERNAME and BREWCREATOR_PASSWORD must be set")
         self.api = BrewCreatorAPI(username, password, SimpleTokenStorage())
 
     async def asyncTearDown(self):

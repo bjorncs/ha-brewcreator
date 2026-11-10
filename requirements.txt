@@ -1,1 +1,2 @@
-homeassistant==2025.6.3
+homeassistant==2026.11.1
+-c https://raw.githubusercontent.com/home-assistant/core/2026.11.1/homeassistant/package_constraints.txt

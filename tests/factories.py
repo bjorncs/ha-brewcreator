@@ -4,6 +4,9 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from homeassistant.helpers import intent, llm
+import probatio
+
 from custom_components.brewcreator.api import (
     Ferminator,
     Graviator,
@@ -149,3 +152,9 @@ DEVICETWIN_MESSAGE = {
         )
     ],
 }
+
+
+def tool_parameters(handler: intent.IntentHandler) -> dict:
+    """The OpenAPI parameters of the LLM tool for the intent, as an LLM agent gets them."""
+    tool = llm.IntentTool(handler.intent_type, handler)
+    return probatio.to_openapi(tool.parameters, custom_serializer=llm.selector_serializer)

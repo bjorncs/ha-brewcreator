@@ -8,7 +8,6 @@ from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import intent, llm
 from homeassistant.util import dt as dt_util
-from voluptuous_openapi import convert
 
 from custom_components.brewcreator.api import BrewCreatorError, Ferminator
 from custom_components.brewcreator.coordinator import BrewCreatorData
@@ -21,7 +20,7 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
     async_setup_intents,
 )
-from tests.factories import ferminator, ha_device, tilt
+from tests.factories import ferminator, ha_device, tilt, tool_parameters
 
 BATCH = {
     "brewName": "Christmas Miracle",
@@ -358,20 +357,15 @@ class LlmToolTestCase(unittest.TestCase):
             LinkHydrometerIntentHandler(),
         ):
             with self.subTest(handler.intent_type):
-                tool = llm.IntentTool(handler.intent_type, handler)
-                self.assertEqual(handler.description, tool.description)
-                parameters = convert(tool.parameters, custom_serializer=llm._selector_serializer)
+                self.assertEqual(handler.description, llm.IntentTool(handler.intent_type, handler).description)
+                parameters = tool_parameters(handler)
                 self.assertEqual("object", parameters["type"])
                 self.assertIn("name", parameters["properties"])
                 for prop in parameters["properties"].values():
                     self.assertIn("description", prop)
 
     def test_batch_parameters(self):
-        handler = SetBatchInfoIntentHandler()
-        parameters = convert(
-            llm.IntentTool(handler.intent_type, handler).parameters,
-            custom_serializer=llm._selector_serializer,
-        )["properties"]
+        parameters = tool_parameters(SetBatchInfoIntentHandler())["properties"]
         self.assertEqual("number", parameters["original_gravity"]["type"])
         self.assertEqual("integer", parameters["ibu"]["type"])
         self.assertEqual("boolean", parameters["started"]["type"])
