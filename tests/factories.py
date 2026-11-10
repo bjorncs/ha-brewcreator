@@ -45,6 +45,8 @@ def ferminator(
             connected,
             **{
                 "actualTemperature": 18.0,
+                "setTemperature": 18.0,
+                "brewName": None,
                 "lastActivityTime": None,
                 "deviceTwinState": {
                     "connectionState": connection_state,

@@ -119,8 +119,12 @@ class BatchInfo:
         return self._json.get("volume")
 
     @property
-    def fermentation_type(self) -> FermentationType:
-        return FermentationType(self._json.get("fermented"))
+    def fermentation_type(self) -> FermentationType | None:
+        """The fermentation type, or None if missing or not one BrewCreator is known to report."""
+        try:
+            return FermentationType(self._json.get("fermented"))
+        except ValueError:
+            return None
 
     @property
     def og(self) -> float:
@@ -249,8 +253,8 @@ class Hydrometer(BrewCreatorEquipment, ABC):
         return value
 
     @property
-    def abv(self) -> float:
-        return self._json["abv"]
+    def abv(self) -> float | None:
+        return self._json.get("abv")
 
     @property
     def last_activity_time(self) -> datetime | None:
@@ -287,7 +291,7 @@ class Ferminator(BrewCreatorEquipment):
     @property
     def actual_temperature(self) -> float | None:
         """Temperature from the linked hydrometer if it has a valid reading, else from the built-in probe."""
-        hydrometer = self.__linked_hydrometer_with_reading
+        hydrometer = self.active_hydrometer
         if hydrometer is not None:
             return hydrometer.actual_temperature
         return self.actual_temperature_builtin_probe
@@ -302,7 +306,7 @@ class Ferminator(BrewCreatorEquipment):
 
     @property
     def fan_speed(self) -> int | None:
-        return self._json["fanSpeed"]
+        return self._json.get("fanSpeed")
 
     @property
     def target_temperature(self) -> float | None:
@@ -374,7 +378,8 @@ class Ferminator(BrewCreatorEquipment):
         ]
 
     @property
-    def __linked_hydrometer_with_reading(self) -> Hydrometer | None:
+    def active_hydrometer(self) -> Hydrometer | None:
+        """The first linked hydrometer with a valid reading, which the Ferminator regulates on."""
         return next(
             (
                 e

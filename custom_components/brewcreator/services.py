@@ -47,22 +47,22 @@ MAX_INTEGER = 9999
 
 FERMENTATION_TYPES = {t.name.lower(): t for t in FermentationType}
 
-_TEXT = vol.All(cv.string, vol.Length(min=1, max=MAX_TEXT_LENGTH))
-_GRAVITY = vol.All(vol.Coerce(float), vol.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
-_POSITIVE_INTEGER = vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_INTEGER))
+TEXT = vol.All(cv.string, vol.Length(min=1, max=MAX_TEXT_LENGTH))
+GRAVITY = vol.All(vol.Coerce(float), vol.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
+POSITIVE_INTEGER = vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_INTEGER))
 
 SET_BATCH_INFO_SCHEMA = vol.All(
     vol.Schema(
         {
             vol.Required(ATTR_DEVICE_ID): cv.string,
-            vol.Optional(ATTR_BATCH_NAME): _TEXT,
-            vol.Optional(ATTR_OWNER): _TEXT,
-            vol.Optional(ATTR_BEER_STYLE): _TEXT,
-            vol.Optional(ATTR_ORIGINAL_GRAVITY): _GRAVITY,
-            vol.Optional(ATTR_FINAL_GRAVITY): _GRAVITY,
-            vol.Optional(ATTR_EBC): _POSITIVE_INTEGER,
-            vol.Optional(ATTR_IBU): _POSITIVE_INTEGER,
-            vol.Optional(ATTR_VOLUME): _POSITIVE_INTEGER,
+            vol.Optional(ATTR_BATCH_NAME): TEXT,
+            vol.Optional(ATTR_OWNER): TEXT,
+            vol.Optional(ATTR_BEER_STYLE): TEXT,
+            vol.Optional(ATTR_ORIGINAL_GRAVITY): GRAVITY,
+            vol.Optional(ATTR_FINAL_GRAVITY): GRAVITY,
+            vol.Optional(ATTR_EBC): POSITIVE_INTEGER,
+            vol.Optional(ATTR_IBU): POSITIVE_INTEGER,
+            vol.Optional(ATTR_VOLUME): POSITIVE_INTEGER,
             vol.Optional(ATTR_FERMENTATION_TYPE): vol.In(list(FERMENTATION_TYPES)),
             vol.Optional(ATTR_STARTED): cv.boolean,
         }

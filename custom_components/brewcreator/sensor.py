@@ -264,7 +264,8 @@ class FerminatorFermentationTypeEntity(FerminatorBatchSensorEntity):
         self._attr_options = [ft.value for ft in FermentationType]
 
     def _batch_value(self, batch_info: BatchInfo) -> str | None:
-        return batch_info.fermentation_type.value
+        fermentation_type = batch_info.fermentation_type
+        return fermentation_type.value if fermentation_type is not None else None
 
 
 class FerminatorBeerStyleEntity(FerminatorBatchSensorEntity):

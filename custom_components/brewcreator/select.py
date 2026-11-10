@@ -1,6 +1,7 @@
 """Select entity for choosing the hydrometer linked to a Ferminator."""
 
 from collections import Counter
+from collections.abc import Mapping
 
 import aiohttp
 
@@ -11,12 +12,33 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import BrewCreatorError, Hydrometer, linkable_hydrometers
+from .api import (
+    BrewCreatorEquipment,
+    BrewCreatorError,
+    Ferminator,
+    Hydrometer,
+    linkable_hydrometers,
+)
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .entity import FerminatorEntity, register_ferminator_entities
 
 NO_HYDROMETER = "none"
+
+
+def hydrometers_by_option(
+    ferminator: Ferminator, equipment: Mapping[str, BrewCreatorEquipment]
+) -> dict[str, Hydrometer]:
+    """Return the hydrometers that can be linked to the Ferminator, by their option in the Hydrometer select.
+
+    An option is the hydrometer's name, with the start of its equipment ID when two share a name.
+    """
+    hydrometers = linkable_hydrometers(ferminator, equipment)
+    name_counts = Counter(h.name for h in hydrometers)
+    return {
+        h.name if name_counts[h.name] == 1 else f"{h.name} ({h.id[:8]})": h
+        for h in hydrometers
+    }
 
 
 async def async_setup_entry(
@@ -49,12 +71,7 @@ class FerminatorHydrometerEntity(FerminatorEntity, SelectEntity):
         # gone from BrewCreator
         if self._brewcreator_id not in self.coordinator.data.equipment:
             return {}
-        hydrometers = linkable_hydrometers(self._ferminator(), self.coordinator.data.equipment)
-        name_counts = Counter(h.name for h in hydrometers)
-        return {
-            h.name if name_counts[h.name] == 1 else f"{h.name} ({h.id[:8]})": h
-            for h in hydrometers
-        }
+        return hydrometers_by_option(self._ferminator(), self.coordinator.data.equipment)
 
     @property
     def options(self) -> list[str]:

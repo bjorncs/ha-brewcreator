@@ -39,6 +39,25 @@ data:
 The final gravity must be below the original gravity. Version 1.0.0 replaces the batch options dialog and the
 Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
 
+## Assist and AI assistants
+The integration adds intents that LLM conversation agents (OpenAI, Anthropic, Ollama, …) get as tools when
+they use the Assist API. MCP clients get them too, through Home Assistant's MCP Server integration:
+
+| Tool | What it does |
+|------|--------------|
+| `BrewCreatorGetFermentationStatus` | Batch info, temperatures, specific gravity, ABV and days fermenting of a Ferminator or hydrometer |
+| `BrewCreatorSetBatchInfo` | Changes the batch info, like the `brewcreator.set_batch_info` action |
+| `BrewCreatorLinkHydrometer` | Links a hydrometer to a Ferminator, or unlinks it |
+
+An agent only sees Ferminators and hydrometers that have at least one entity exposed to Assist. The
+Ferminator's Temperature Control is exposed by default. To expose the others, go to *Settings → Voice assistants →
+Expose*. The built-in intents also work on that climate entity, for example "set the Ferminator to 12 degrees".
+Example prompts:
+
+- "How is my brew doing?"
+- "Start a new batch called Easter Ale, OG 1.050, bottom fermented."
+- "Link the orange Tilt to the Ferminator."
+
 ## Quiet regulation (reduce fan noise)
 The Ferminator's fan runs whenever temperature regulation is on, also while it is neither cooling nor heating.
 The *Ferminator quiet regulation* blueprint turns regulation off while the beer is close to its target temperature,
