@@ -3,8 +3,13 @@
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    EVENT_HOMEASSISTANT_STOP,
+    Platform,
+)
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import (
     config_validation as cv,
     device_registry as dr,
@@ -59,6 +64,14 @@ async def async_setup_entry(
         # The websocket is started before the first refresh. HA retries setup with a new coordinator, so stop it.
         await coordinator.close()
         raise
+
+    async def _async_stop_websocket(_: Event) -> None:
+        # HA doesn't unload entries when it stops, and closes the shared session soon after
+        await coordinator.close()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_websocket)
+    )
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
