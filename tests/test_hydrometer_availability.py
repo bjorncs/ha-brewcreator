@@ -103,6 +103,11 @@ class HydrometerLinkTestCase(unittest.TestCase):
         f._update_connected_equipment([f, hydrometer(sg=1.31, temperature=25)])
         self.assertEqual(18.0, f.actual_temperature)
 
+    def test_ferminator_uses_builtin_probe_when_temperature_is_out_of_range(self):
+        f = ferminator()
+        f._update_connected_equipment([f, hydrometer(temperature=150)])
+        self.assertEqual(18.0, f.actual_temperature)
+
 
 class LastActivitySensorTestCase(unittest.TestCase):
     def test_hydrometer_sensor_is_named_last_brew_log_entry_and_keeps_unique_id(self):

@@ -32,6 +32,10 @@ MIN_SPECIFIC_GRAVITY = 0.8
 # Above any real wort, with margin for badly calibrated hydrometers
 MAX_SPECIFIC_GRAVITY = 1.3
 
+# A measured temperature (°C) outside this range is not plausible for wort or a fermentation chamber
+MIN_TEMPERATURE = -20
+MAX_TEMPERATURE = 120
+
 # SignalR JSON protocol record separator, terminating every frame
 SIGNALR_RECORD_SEPARATOR = "\x1e"
 
@@ -39,6 +43,13 @@ SIGNALR_RECORD_SEPARATOR = "\x1e"
 WEBSOCKET_SHORT_CONNECTION_SECONDS = 10
 WEBSOCKET_MIN_BACKOFF_SECONDS = 2
 WEBSOCKET_MAX_BACKOFF_SECONDS = 60
+
+
+def _plausible_temperature(value: float | None) -> float | None:
+    """The measured temperature, or None if it is missing or outside MIN_TEMPERATURE-MAX_TEMPERATURE."""
+    if value is None or not MIN_TEMPERATURE <= value <= MAX_TEMPERATURE:
+        return None
+    return value
 
 
 class FerminatorMode(Enum):
@@ -160,7 +171,8 @@ class BrewCreatorEquipment(ABC):
 
     @property
     def actual_temperature(self) -> float | None:
-        return self._json["actualTemperature"]
+        """Measured temperature, or None if missing or outside MIN_TEMPERATURE-MAX_TEMPERATURE."""
+        return _plausible_temperature(self._json.get("actualTemperature"))
 
     @property
     def name(self) -> str:
@@ -230,7 +242,7 @@ class BrewCreatorEquipment(ABC):
 class Hydrometer(BrewCreatorEquipment, ABC):
     @property
     def specific_gravity(self) -> float | None:
-        """Specific gravity, or None if missing or outside the plausible range 0.8-1.3."""
+        """Specific gravity, or None if missing or outside MIN_SPECIFIC_GRAVITY-MAX_SPECIFIC_GRAVITY."""
         value = self._json.get("sg")
         if value is None or not MIN_SPECIFIC_GRAVITY <= value <= MAX_SPECIFIC_GRAVITY:
             return None
@@ -278,12 +290,15 @@ class Ferminator(BrewCreatorEquipment):
         hydrometer = self.__linked_hydrometer_with_reading
         if hydrometer is not None:
             return hydrometer.actual_temperature
-        return self._json["actualTemperature"]
+        return self.actual_temperature_builtin_probe
 
     @property
     def actual_temperature_builtin_probe(self) -> float | None:
-        """Temperature from the Ferminator's built-in probe, whether or not a hydrometer is linked."""
-        return self._json["actualTemperature"]
+        """Temperature from the Ferminator's built-in probe, whether or not a hydrometer is linked.
+
+        None if missing or outside MIN_TEMPERATURE-MAX_TEMPERATURE.
+        """
+        return super().actual_temperature
 
     @property
     def fan_speed(self) -> int | None:

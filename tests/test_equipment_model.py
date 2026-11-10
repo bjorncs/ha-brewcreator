@@ -8,7 +8,7 @@ from custom_components.brewcreator.api import (
     Ferminator,
     parse_signalr_frames,
 )
-from tests.factories import tilt
+from tests.factories import ferminator, tilt
 
 
 class UpdateEquipmentStateTestCase(unittest.IsolatedAsyncioTestCase):
@@ -68,6 +68,29 @@ class SpecificGravityRangeTestCase(unittest.TestCase):
 
     def test_missing_value(self):
         self.assertIsNone(tilt(sg=None).specific_gravity)
+
+
+class TemperatureRangeTestCase(unittest.TestCase):
+    def test_out_of_range_values_are_rejected(self):
+        for temperature in (-20.1, -100, 120.1, 1000):
+            with self.subTest(temperature=temperature):
+                self.assertIsNone(tilt(temperature=temperature).actual_temperature)
+                self.assertIsNone(
+                    ferminator(actualTemperature=temperature).actual_temperature_builtin_probe
+                )
+
+    def test_bounds_and_plausible_values_are_kept(self):
+        for temperature in (-20, 0, 20.2, 120):
+            with self.subTest(temperature=temperature):
+                self.assertEqual(temperature, tilt(temperature=temperature).actual_temperature)
+                self.assertEqual(
+                    temperature,
+                    ferminator(actualTemperature=temperature).actual_temperature_builtin_probe,
+                )
+
+    def test_missing_value(self):
+        self.assertIsNone(tilt(temperature=None).actual_temperature)
+        self.assertIsNone(ferminator(actualTemperature=None).actual_temperature_builtin_probe)
 
 
 class SignalRParsingTestCase(unittest.TestCase):
