@@ -53,7 +53,12 @@ async def async_setup_entry(
         async_get_clientsession(hass),
     )
     coordinator = BrewCreatorDataUpdateCoordinator(hass, api, entry)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        # The websocket is started before the first refresh. HA retries setup with a new coordinator, so stop it.
+        await coordinator.close()
+        raise
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
