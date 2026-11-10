@@ -1,0 +1,163 @@
+blueprint:
+  name: Ferminator quiet regulation
+  description: >
+    Turns a Ferminator's temperature regulation off while the beer is close to its target temperature, and
+    back on once it drifts too far, so the fan only runs when it is needed.
+
+
+    Regulation is turned off when the beer is within the **off threshold** of the target, and turned back on
+    when it is at least the **on threshold** away. The gap between the two keeps it from switching back and forth.
+    Temperatures and thresholds are in your Home Assistant temperature unit. The defaults are meant for °C; with °F,
+    use about 0.9 and 1.8 instead.
+
+
+    Use a smoothed beer temperature: a Statistics helper with the characteristic "Average step" over the
+    hydrometer's temperature sensor. See the README for details.
+
+
+    To fail safe, regulation is turned on when the beer temperature has been unavailable for 2 minutes, e.g. when
+    the hydrometer has stopped reporting.
+
+
+    It only acts while the Ferminator is online, so a Ferminator you have switched off after a batch is left alone.
+  domain: automation
+  source_url: https://github.com/bjorncs/ha-brewcreator/blob/main/blueprints/automation/bjorncs/ferminator_quiet_regulation.yaml
+  input:
+    climate_entity:
+      name: Ferminator
+      description: The Ferminator's Temperature Control entity.
+      selector:
+        entity:
+          filter:
+            - integration: brewcreator
+              domain: climate
+    temperature_sensor:
+      name: Beer temperature (optional)
+      description: >
+        A smoothed beer temperature, e.g. a Statistics helper named "Beer Temperature" that averages the
+        hydrometer's temperature over 30 minutes, such as "Tilt Black Beer Temperature". Leave empty to use the
+        Ferminator's current temperature as reported by BrewCreator.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: temperature
+    off_threshold:
+      name: Off threshold
+      description: >
+        Turn regulation off when the beer is at most this far from the target temperature. The default is for °C;
+        use about 0.9 with °F.
+      default: 0.5
+      selector:
+        number:
+          min: 0.1
+          max: 5.0
+          step: 0.1
+          mode: box
+    on_threshold:
+      name: On threshold
+      description: >
+        Turn regulation back on when the beer is at least this far from the target temperature. Must be larger
+        than the off threshold. The default is for °C; use about 1.8 with °F.
+      default: 1.0
+      selector:
+        number:
+          min: 0.2
+          max: 10.0
+          step: 0.1
+          mode: box
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  # Without from/to, this also fires when an attribute changes, such as the current or target temperature
+  - trigger: state
+    entity_id: !input climate_entity
+  - trigger: state
+    entity_id: !input temperature_sensor
+  # Re-evaluate the fail-safe once the beer temperature has been unavailable, or the Ferminator back online, long
+  # enough
+  - trigger: state
+    entity_id: !input temperature_sensor
+    to: unavailable
+    for:
+      minutes: 2
+  - trigger: state
+    entity_id: !input climate_entity
+    from: unavailable
+    for:
+      minutes: 2
+  - trigger: homeassistant
+    event: start
+  - trigger: event
+    event_type: automation_reloaded
+
+variables:
+  climate_entity: !input climate_entity
+  temperature_sensor_input: !input temperature_sensor
+  off_threshold: !input off_threshold
+  on_threshold: !input on_threshold
+  # An optional entity input is [] when left empty and the entity ID when set
+  temperature_sensor: "{{ temperature_sensor_input if temperature_sensor_input is string else '' }}"
+  target: "{{ state_attr(climate_entity, 'temperature') }}"
+  temperature: >-
+    {{ states(temperature_sensor) if temperature_sensor else state_attr(climate_entity, 'current_temperature') }}
+  temperature_valid: "{{ temperature | is_number and target | is_number }}"
+  # Only unavailable forces regulation on, and only once both it and the Ferminator have been unchanged for 2
+  # minutes. A Statistics helper is unknown for a while after a restart or reload, and stays unavailable for a few
+  # seconds after the Ferminator comes back online, however long it was offline. Neither should start the fan.
+  temperature_unavailable: >-
+    {{ temperature_sensor != '' and is_state(temperature_sensor, 'unavailable')
+       and now() - ([states[temperature_sensor].last_changed, states[climate_entity].last_changed] | max)
+           >= timedelta(minutes=2) }}
+  delta: "{{ (temperature | float - target | float) | abs if temperature_valid else 0 }}"
+  thresholds_valid: "{{ on_threshold | float > off_threshold | float }}"
+
+conditions:
+  # The climate entity is unavailable while the Ferminator is offline, e.g. switched off, so it is left alone then.
+  # Its state trigger runs the automation again once the Ferminator is back online.
+  - condition: template
+    value_template: "{{ states(climate_entity) in ['off', 'heat_cool'] }}"
+
+actions:
+  - choose:
+      - alias: Warn about misconfigured thresholds
+        conditions:
+          - condition: template
+            value_template: "{{ not thresholds_valid }}"
+        sequence:
+          - action: system_log.write
+            data:
+              level: warning
+              logger: blueprints.ferminator_quiet_regulation
+              message: >-
+                {{ this.entity_id }}: the on threshold ({{ on_threshold }}) must be larger than the off threshold
+                ({{ off_threshold }}). Regulation is left as it is.
+      - alias: Turn regulation on when out of band, or when the beer temperature is unavailable
+        conditions:
+          - condition: template
+            value_template: "{{ states(climate_entity) == 'off' }}"
+          - condition: template
+            value_template: >-
+              {{ temperature_unavailable or (temperature_valid and delta >= on_threshold) }}
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              hvac_mode: heat_cool
+      - alias: Turn regulation off when within band
+        conditions:
+          - condition: template
+            value_template: "{{ states(climate_entity) == 'heat_cool' }}"
+          - condition: template
+            value_template: >-
+              {{ temperature_valid and delta <= off_threshold }}
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              hvac_mode: "off"
