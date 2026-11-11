@@ -1,6 +1,6 @@
+import logging
 from abc import ABC
 from collections.abc import Callable
-import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
@@ -62,17 +62,12 @@ class BrewCreatorEntity(CoordinatorEntity[BrewCreatorDataUpdateCoordinator], ABC
 
     @property
     def available(self) -> bool:
-        return self._equipment_available and (
-            not self._requires_connection or self._brewcreator_device.is_connected
-        )
+        return self._equipment_available and (not self._requires_connection or self._brewcreator_device.is_connected)
 
     @property
     def _equipment_available(self) -> bool:
         """Return whether the last refresh succeeded and the equipment is still in BrewCreator."""
-        return (
-            self.coordinator.last_update_success
-            and self._brewcreator_id in self.coordinator.data.equipment
-        )
+        return self.coordinator.last_update_success and self._brewcreator_id in self.coordinator.data.equipment
 
     @property
     def _brewcreator_device(self) -> BrewCreatorEquipment:
@@ -135,4 +130,3 @@ def register_entities(
         return failed
 
     entry.async_on_unload(coordinator.async_add_equipment_listener(add_entities))
-

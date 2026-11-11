@@ -1,19 +1,19 @@
-from abc import ABC
 import asyncio
-from asyncio import Task
 import base64
-from collections.abc import Awaitable, Callable, Mapping
 import contextlib
-from datetime import UTC, datetime, timedelta
-from enum import Enum
 import hashlib
 import json as _json
 import logging
 import re
 import secrets
+import zoneinfo
+from abc import ABC
+from asyncio import Task
+from collections.abc import Awaitable, Callable, Mapping
+from datetime import UTC, datetime, timedelta
+from enum import Enum
 from time import monotonic
 from typing import Any, Protocol
-import zoneinfo
 
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionResetError
@@ -155,7 +155,7 @@ class BrewCreatorAuthError(BrewCreatorError):
 
 
 class BrewCreatorEquipment(ABC):
-    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
         self._api = api
         self._json = json
 
@@ -208,7 +208,7 @@ class BrewCreatorEquipment(ABC):
         return False
 
     @property
-    def batch_owner(self) -> "BrewCreatorEquipment | None":
+    def batch_owner(self) -> BrewCreatorEquipment | None:
         """The equipment whose batch info applies to this equipment, if any.
 
         A Ferminator and an unlinked Graviator own their batch. A linked hydrometer gets its Ferminator's batch, which
@@ -249,12 +249,12 @@ class BrewCreatorEquipment(ABC):
 
 
 class Hydrometer(BrewCreatorEquipment, ABC):
-    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
         super().__init__(api, json)
         self._linked_ferminator: Ferminator | None = None
 
     @property
-    def linked_ferminator(self) -> "Ferminator | None":
+    def linked_ferminator(self) -> Ferminator | None:
         """The Ferminator listing this hydrometer in its connectedEquipments, as set by resolve_links()."""
         return self._linked_ferminator
 
@@ -324,7 +324,7 @@ class Graviator(Hydrometer):
 
 
 class Ferminator(BrewCreatorEquipment):
-    def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
         super().__init__(api, json)
         self._linked_hydrometers: list[Hydrometer] = []
         self.inactive_too_long = False
@@ -431,19 +431,13 @@ class Ferminator(BrewCreatorEquipment):
 
         BrewCreator moves the link on both sides and copies the Ferminator's batch info to the newly linked hydrometer.
         """
-        await self._update_equipment(
-            {"connectedEquipments": [hydrometer.id] if hydrometer is not None else []}
-        )
+        await self._update_equipment({"connectedEquipments": [hydrometer.id] if hydrometer is not None else []})
 
     @property
     def active_hydrometer(self) -> Hydrometer | None:
         """The first linked hydrometer with a valid reading, which the Ferminator regulates on."""
         return next(
-            (
-                e
-                for e in self.linked_hydrometers
-                if e.specific_gravity is not None and e.actual_temperature is not None
-            ),
+            (e for e in self.linked_hydrometers if e.specific_gravity is not None and e.actual_temperature is not None),
             None,
         )
 
@@ -488,16 +482,10 @@ def resolve_links(equipment: Mapping[str, BrewCreatorEquipment]) -> None:
                 h._linked_ferminator = ferminator
 
 
-def linkable_hydrometers(
-    ferminator: Ferminator, equipment: Mapping[str, BrewCreatorEquipment]
-) -> list[Hydrometer]:
+def linkable_hydrometers(ferminator: Ferminator, equipment: Mapping[str, BrewCreatorEquipment]) -> list[Hydrometer]:
     """Return the hydrometers the Ferminator can link to, ordered by name: those not linked to another Ferminator."""
     return sorted(
-        (
-            e
-            for e in equipment.values()
-            if isinstance(e, Hydrometer) and e.linked_ferminator in (None, ferminator)
-        ),
+        (e for e in equipment.values() if isinstance(e, Hydrometer) and e.linked_ferminator in (None, ferminator)),
         key=lambda h: (h.name, h.id),
     )
 
@@ -582,9 +570,7 @@ class BrewCreatorAPI:
                 break
         else:
             # A partial list would make devices look removed
-            raise BrewCreatorError(
-                f"More than {EQUIPMENT_MAX_PAGES} pages of equipment"
-            )
+            raise BrewCreatorError(f"More than {EQUIPMENT_MAX_PAGES} pages of equipment")
         equipment = {e.id: e for e in map(self.__get_equipment_from_json, equipment_json)}
         resolve_links(equipment)
         return equipment
@@ -616,27 +602,19 @@ class BrewCreatorAPI:
                 await self.__websocket_task
             self.__websocket_task = None
 
-    async def _update_equipment_state(
-        self, equipment_id: str, json_payload: dict[str, any]
-    ) -> None:
+    async def _update_equipment_state(self, equipment_id: str, json_payload: dict[str, any]) -> None:
         """Update equipment, raising BrewCreatorError if BrewCreator rejects the update."""
-        json = await self.__do_authenticated_request(
-            "PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload
-        )
+        json = await self.__do_authenticated_request("PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload)
         if not (json or {}).get("succeeded"):
             raise BrewCreatorError(f"BrewCreator rejected the update of {equipment_id}")
 
-    def __get_equipment_from_json(
-        self, equipment: dict[str, any]
-    ) -> BrewCreatorEquipment:
+    def __get_equipment_from_json(self, equipment: dict[str, any]) -> BrewCreatorEquipment:
         value = equipment["iotHubBrewEquipmentGroupId"]
         if (equipment_class := _EQUIPMENT_CLASSES.get(value)) is not None:
             return equipment_class(self, equipment)
         if value not in self.__logged_unsupported_types:
             self.__logged_unsupported_types.add(value)
-            _LOGGER.warning(
-                "Unsupported equipment type '%s' with ID '%s'", value, equipment["id"]
-            )
+            _LOGGER.warning("Unsupported equipment type '%s' with ID '%s'", value, equipment["id"])
         return UnsupportedEquipment(self, equipment)
 
     async def __websocket_loop(self) -> None:
@@ -646,9 +624,7 @@ class BrewCreatorAPI:
             try:
                 connected_seconds = await self.__websocket_connect_and_listen()
             except asyncio.CancelledError:
-                _LOGGER.info(
-                    "WebSocket listener stopped. Shutting down websocket task."
-                )
+                _LOGGER.info("WebSocket listener stopped. Shutting down websocket task.")
                 return
             except Exception as err:
                 # Only the first failure in a row gets a traceback, e.g. while the network is down
@@ -660,10 +636,7 @@ class BrewCreatorAPI:
                 connected_seconds = None
             else:
                 failing = False
-            if (
-                connected_seconds is not None
-                and connected_seconds >= WEBSOCKET_SHORT_CONNECTION_SECONDS
-            ):
+            if connected_seconds is not None and connected_seconds >= WEBSOCKET_SHORT_CONNECTION_SECONDS:
                 backoff_seconds = WEBSOCKET_MIN_BACKOFF_SECONDS
                 continue
             # The server closed the connection straight away, the handshake failed, or connecting failed
@@ -676,9 +649,7 @@ class BrewCreatorAPI:
 
         Returns how many seconds the connection lasted after a successful handshake, or None if the handshake failed.
         """
-        response = await self.__do_authenticated_request(
-            "POST", "/telemetry/negotiate?negotiateVersion=1"
-        )
+        response = await self.__do_authenticated_request("POST", "/telemetry/negotiate?negotiateVersion=1")
         connection_token = response["connectionToken"]
         wss_host = "wss://api.brewcreator.com"
         url = f"{wss_host}/telemetry?id={connection_token}&access_token={self.__access_token}"
@@ -693,19 +664,14 @@ class BrewCreatorAPI:
             await _send_signalr(ws, '{"protocol":"json","version":1}')
             handshake_response = await ws.receive()
             handshake_data = handshake_response.data
-            if (
-                not isinstance(handshake_data, str)
-                or handshake_data.strip(SIGNALR_RECORD_SEPARATOR) != "{}"
-            ):
+            if not isinstance(handshake_data, str) or handshake_data.strip(SIGNALR_RECORD_SEPARATOR) != "{}":
                 _LOGGER.warning(
                     "Unexpected handshake response: '%s'. Connection will likely be closed by server",
                     handshake_data,
                 )
                 connected_at = None
             else:
-                await _send_signalr(
-                    ws, '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}'
-                )
+                await _send_signalr(ws, '{"arguments":["devicetwin"],"target":"SubscribeToUser","type":1}')
                 _LOGGER.info("Successfully connected to %s", wss_host)
                 connected_at = monotonic()
                 # Refetch state, as anything may have changed while disconnected
@@ -785,18 +751,12 @@ class BrewCreatorAPI:
                     json=json,
                 ) as response:
                     if response.status == 401:
-                        raise BrewCreatorAuthError(  # noqa: TRY301
-                            f"Failed to {method} {path}: {response.status}"
-                        )
+                        raise BrewCreatorAuthError(f"Failed to {method} {path}: {response.status}")
                     if response.status == 500:
-                        _LOGGER.info(
-                            "Failed to %s %s: %s", method, path, response.status
-                        )
+                        _LOGGER.info("Failed to %s %s: %s", method, path, response.status)
                         continue
                     if response.status != 200:
-                        raise BrewCreatorError(
-                            f"Failed to {method} {path}: {response.status}"
-                        )
+                        raise BrewCreatorError(f"Failed to {method} {path}: {response.status}")
                     return await response.json() if response.content else None
             except BrewCreatorAuthError as e:
                 _LOGGER.info(
@@ -825,9 +785,7 @@ class BrewCreatorAPI:
                 self.__expire_time,
             ) = await self.__token_storage.load_tokens()
             self.__initial_token_load_completed = True
-            _LOGGER.debug(
-                "Loaded access token from storage with expiry %s", self.__expire_time
-            )
+            _LOGGER.debug("Loaded access token from storage with expiry %s", self.__expire_time)
         if not self.__is_access_token_missing_or_expired():
             _LOGGER.debug(
                 "Access token is assumed valid as it has expiry %s",
@@ -837,9 +795,7 @@ class BrewCreatorAPI:
         if self.__refresh_token is not None:
             await self.__set_tokens(await self.__exchange_refresh_token_for_tokens())
             return
-        await self.__set_tokens(
-            await self.__exchange_username_and_password_for_tokens()
-        )
+        await self.__set_tokens(await self.__exchange_username_and_password_for_tokens())
 
     def __is_access_token_missing_or_expired(self) -> bool:
         if self.__access_token is None:
@@ -896,14 +852,10 @@ class BrewCreatorAPI:
         )
 
     async def __get_csrf_token(self) -> str:
-        async with self.__session.get(
-            "https://identity.brewcreator.com/Account/Login", timeout=60
-        ) as response:
+        async with self.__session.get("https://identity.brewcreator.com/Account/Login", timeout=60) as response:
             if response.status != 200:
                 raise BrewCreatorError(f"Failed to get CSRF token: {response.status}")
-            pattern = (
-                '<input name="__RequestVerificationToken" type="hidden" value="([^"]*)"'
-            )
+            pattern = '<input name="__RequestVerificationToken" type="hidden" value="([^"]*)"'
             csrf_token = re.search(pattern, await response.text()).group(1)
             _LOGGER.debug("Found CSRF token of length %d", len(csrf_token))
             return csrf_token
@@ -942,6 +894,4 @@ class BrewCreatorAPI:
     async def __set_tokens(self, tokens: tuple[str, str, datetime]) -> None:
         _LOGGER.debug("Storing new access token with expiry %s", tokens[2])
         self.__access_token, self.__refresh_token, self.__expire_time = tokens
-        await self.__token_storage.save_tokens(
-            self.__access_token, self.__refresh_token, self.__expire_time
-        )
+        await self.__token_storage.save_tokens(self.__access_token, self.__refresh_token, self.__expire_time)

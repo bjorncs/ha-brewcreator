@@ -1,17 +1,19 @@
 import asyncio
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import voluptuous as vol
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.brewcreator.api import BrewCreatorError
 from custom_components.brewcreator.services import (
     SET_BATCH_INFO_SCHEMA,
     _async_set_batch_info,
 )
-from tests.factories import BATCH, coordinator as make_coordinator, ferminator, graviator, ha_device, tilt
+from tests.factories import BATCH, ferminator, graviator, ha_device, tilt
+from tests.factories import coordinator as make_coordinator
+
 
 def batch_ferminator(**batch):
     f = ferminator(**{**BATCH, **batch})
@@ -24,14 +26,10 @@ class SetBatchInfoTestCase(unittest.TestCase):
     def call(self, dr, equipment, device_identifier="f", loaded=True, **data):
         coordinator = make_coordinator(*equipment)
         device = ha_device(device_identifier)
-        dr.async_get.return_value.async_get.side_effect = (
-            lambda device_id: device if device_id == device.id else None
-        )
+        dr.async_get.return_value.async_get.side_effect = lambda device_id: device if device_id == device.id else None
         hass = MagicMock()
         hass.config_entries.async_loaded_entries.side_effect = lambda domain: (
-            [SimpleNamespace(runtime_data=coordinator)]
-            if loaded and domain == "brewcreator"
-            else []
+            [SimpleNamespace(runtime_data=coordinator)] if loaded and domain == "brewcreator" else []
         )
         call = SimpleNamespace(
             hass=hass,

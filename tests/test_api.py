@@ -6,6 +6,7 @@ from datetime import datetime
 
 from custom_components.brewcreator.api import BrewCreatorAPI, BrewCreatorEquipment, Ferminator
 
+
 class SimpleTokenStorage:
     def __init__(self):
         self._access_token = None
@@ -15,15 +16,13 @@ class SimpleTokenStorage:
     async def load_tokens(self) -> tuple[str, str, datetime]:
         return self._access_token, self._refresh_token, self._expire_time
 
-    async def save_tokens(
-            self, access_token: str, refresh_token: str, expire_time: datetime
-    ):
+    async def save_tokens(self, access_token: str, refresh_token: str, expire_time: datetime):
         self._access_token = access_token
         self._refresh_token = refresh_token
         self._expire_time = expire_time
 
-class MyTestCase(unittest.IsolatedAsyncioTestCase):
 
+class MyTestCase(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         logging.basicConfig(level=logging.DEBUG)
@@ -59,5 +58,6 @@ async def print_equipment(equipment: dict[str, BrewCreatorEquipment]):
     for e in equipment.items():
         print(f"{e[0]}: {e[1].json}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

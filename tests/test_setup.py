@@ -1,6 +1,6 @@
 import asyncio
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
@@ -20,16 +20,12 @@ class SetupEntryTestCase(unittest.TestCase):
         coordinator.close = AsyncMock()
         hass = MagicMock()
         hass.config_entries.async_forward_entry_setups = AsyncMock()
-        entry = SimpleNamespace(
-            data={"username": "user", "password": "secret"}, async_on_unload=MagicMock()
-        )
+        entry = SimpleNamespace(data={"username": "user", "password": "secret"}, async_on_unload=MagicMock())
         return coordinator, hass, entry
 
     def test_failed_first_refresh_is_raised(self, coordinator_class):
         # HA then shuts the coordinator down, which stops the websocket
-        _, hass, entry = self.setup_entry(
-            coordinator_class, AsyncMock(side_effect=ConfigEntryNotReady("503"))
-        )
+        _, hass, entry = self.setup_entry(coordinator_class, AsyncMock(side_effect=ConfigEntryNotReady("503")))
         with self.assertRaises(ConfigEntryNotReady):
             asyncio.run(async_setup_entry(hass, entry))
         hass.config_entries.async_forward_entry_setups.assert_not_awaited()

@@ -25,10 +25,7 @@ def hydrometers_by_option(
     """
     hydrometers = linkable_hydrometers(ferminator, equipment)
     name_counts = Counter(h.name for h in hydrometers)
-    return {
-        h.name if name_counts[h.name] == 1 else f"{h.name} ({h.id[:8]})": h
-        for h in hydrometers
-    }
+    return {h.name if name_counts[h.name] == 1 else f"{h.name} ({h.id[:8]})": h for h in hydrometers}
 
 
 async def async_setup_entry(

@@ -1,7 +1,7 @@
 import asyncio
+import unittest
 from datetime import timedelta
 from types import SimpleNamespace
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import Context
@@ -19,7 +19,8 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
     async_setup_intents,
 )
-from tests.factories import coordinator as make_coordinator, ferminator, graviator, ha_device, tilt, tool_parameters
+from tests.factories import coordinator as make_coordinator
+from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
 
 BATCH = {
     "brewName": "Christmas Miracle",
@@ -51,13 +52,9 @@ class IntentTestCase(unittest.TestCase):
     def setup(self, *equipment, device_names=None, exposed=None):
         """Create a device per equipment; only those in exposed (all by default) have an exposed entity."""
         device_names = device_names or {}
-        devices = {
-            e.id: ha_device(e.id, name=device_names.get(e.id, e.name)) for e in equipment
-        }
-        self.dr.async_get.return_value.async_get_device_by_identifier.side_effect = (
-            lambda identifier, config_entry_id: devices.get(identifier[1])
-            if config_entry_id == "entry"
-            else None
+        devices = {e.id: ha_device(e.id, name=device_names.get(e.id, e.name)) for e in equipment}
+        self.dr.async_get.return_value.async_get_device_by_identifier.side_effect = lambda identifier, config_entry_id: (
+            devices.get(identifier[1]) if config_entry_id == "entry" else None
         )
         self.er.async_entries_for_device.side_effect = lambda registry, device_id: [
             SimpleNamespace(entity_id=f"sensor.{device_id}")
@@ -73,9 +70,7 @@ class IntentTestCase(unittest.TestCase):
         self.equipment = coordinator.data.equipment
         self.hass = MagicMock()
         self.hass.config_entries.async_loaded_entries.side_effect = lambda domain: (
-            [SimpleNamespace(entry_id="entry", runtime_data=coordinator)]
-            if domain == "brewcreator"
-            else []
+            [SimpleNamespace(entry_id="entry", runtime_data=coordinator)] if domain == "brewcreator" else []
         )
         self.hass.services.async_call = AsyncMock()
         return devices
@@ -97,9 +92,7 @@ class IntentTestCase(unittest.TestCase):
 
 class FermentationStatusTestCase(IntentTestCase):
     def status(self, **slots):
-        return self.handle(
-            GetFermentationStatusIntentHandler(), INTENT_GET_FERMENTATION_STATUS, **slots
-        )
+        return self.handle(GetFermentationStatusIntentHandler(), INTENT_GET_FERMENTATION_STATUS, **slots)
 
     def test_only_ferminator_needs_no_name(self):
         brew_date = dt_util.utcnow() - timedelta(days=5, hours=1)
@@ -217,9 +210,7 @@ class FermentationStatusTestCase(IntentTestCase):
 
     def test_speech_without_batch_starts_with_the_name(self):
         self.setup(ferminator("f", name="Ferminator", setTemperature=19.0))
-        self.assertEqual(
-            "Ferminator at 18.0 °C, target 19.0 °C.", self.status().speech["plain"]["speech"]
-        )
+        self.assertEqual("Ferminator at 18.0 °C, target 19.0 °C.", self.status().speech["plain"]["speech"])
 
     def test_unexposed_with_a_name_hints_at_exposing(self):
         self.setup(ferminator("f"), exposed=())
@@ -248,13 +239,17 @@ class SetBatchInfoTestCase(IntentTestCase):
             {"device_id": devices["f"].id, "owner": "Bob", "original_gravity": 1.060, "started": False},
             data,
         )
-        self.assertEqual({"owner": "Bob", "original_gravity": 1.060, "started": False}, response.speech_slots["changed"])
+        self.assertEqual(
+            {"owner": "Bob", "original_gravity": 1.060, "started": False}, response.speech_slots["changed"]
+        )
 
     def test_points_temperature_regulation_to_the_climate_entity(self):
         # An agent once took started=true for turning temperature regulation on
         handler = SetBatchInfoIntentHandler()
         self.assertIn("HassTurnOn", handler.description)
-        self.assertIn("Doesn't turn temperature regulation", tool_parameters(handler)["properties"]["started"]["description"])
+        self.assertIn(
+            "Doesn't turn temperature regulation", tool_parameters(handler)["properties"]["started"]["description"]
+        )
 
     def test_needs_a_field(self):
         self.setup(ferminator("f"))
@@ -351,7 +346,6 @@ class LinkHydrometerTestCase(IntentTestCase):
             self.link(name="Ferminator", hydrometer="Tilt Red")
         self.assertIn("Tilt Black, Tilt Orange", str(raised.exception))
         self.update().assert_not_awaited()
-
 
     def test_unexposed_hydrometer_is_not_linkable(self):
         self.setup(

@@ -185,9 +185,7 @@ class BrewCreatorSensor(BrewCreatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and (
-            not self.entity_description.available_offline or self.native_value is not None
-        )
+        return super().available and (not self.entity_description.available_offline or self.native_value is not None)
 
     @property
     def native_value(self) -> Any:

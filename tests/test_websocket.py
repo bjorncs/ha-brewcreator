@@ -40,9 +40,7 @@ class FakeWebSocket:
 
 
 class WebSocketLoopTestCase(unittest.IsolatedAsyncioTestCase):
-    async def run_loop(
-        self, connections: list[FakeWebSocket], durations: list[float]
-    ) -> tuple[list, list[float]]:
+    async def run_loop(self, connections: list[FakeWebSocket], durations: list[float]) -> tuple[list, list[float]]:
         """Run the websocket loop over the given connections, each lasting the given seconds."""
         session = MagicMock()
         session.ws_connect.side_effect = [*connections, StopLoop()]
@@ -71,27 +69,21 @@ class WebSocketLoopTestCase(unittest.IsolatedAsyncioTestCase):
             patch.object(api, "_BrewCreatorAPI__websocket_signalr_ping", AsyncMock()),
             patch("custom_components.brewcreator.api.asyncio.sleep", fake_sleep),
             patch("custom_components.brewcreator.api.monotonic", side_effect=clock),
+            self.assertRaises(StopLoop),
         ):
-            with self.assertRaises(StopLoop):
-                await api._BrewCreatorAPI__websocket_loop()
+            await api._BrewCreatorAPI__websocket_loop()
         return callback_args, sleeps
 
     async def test_refreshes_after_every_connect(self):
-        callback_args, _ = await self.run_loop(
-            [FakeWebSocket(), FakeWebSocket()], durations=[120, 120]
-        )
+        callback_args, _ = await self.run_loop([FakeWebSocket(), FakeWebSocket()], durations=[120, 120])
         self.assertEqual([None, None], callback_args)
 
     async def test_backs_off_when_server_closes_repeatedly(self):
-        _, sleeps = await self.run_loop(
-            [FakeWebSocket() for _ in range(6)], durations=[0, 1, 0, 0, 0, 0]
-        )
+        _, sleeps = await self.run_loop([FakeWebSocket() for _ in range(6)], durations=[0, 1, 0, 0, 0, 0])
         self.assertEqual([2, 4, 8, 16, 32, 60], sleeps)
 
     async def test_backoff_resets_after_a_long_connection(self):
-        _, sleeps = await self.run_loop(
-            [FakeWebSocket(), FakeWebSocket(), FakeWebSocket()], durations=[0, 300, 0]
-        )
+        _, sleeps = await self.run_loop([FakeWebSocket(), FakeWebSocket(), FakeWebSocket()], durations=[0, 300, 0])
         self.assertEqual([2, 2], sleeps)
 
     async def test_backs_off_after_connection_error(self):
@@ -114,9 +106,7 @@ class WebSocketLoopTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(failures[1].exc_info)
 
     async def test_backs_off_after_failed_handshake(self):
-        callback_args, sleeps = await self.run_loop(
-            [FakeWebSocket(handshake='{"error":"x"}\x1e')], durations=[]
-        )
+        callback_args, sleeps = await self.run_loop([FakeWebSocket(handshake='{"error":"x"}\x1e')], durations=[])
         self.assertEqual([], callback_args)
         self.assertEqual([2], sleeps)
 

@@ -5,8 +5,8 @@ from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.helpers import intent, llm
 import probatio
+from homeassistant.helpers import intent, llm
 
 from custom_components.brewcreator.api import (
     BrewCreatorEquipment,
@@ -68,9 +68,7 @@ def sensor(coordinator: MagicMock, id: str, key: str, *, batch_info: bool = Fals
     return BrewCreatorSensor(coordinator, id, next(d for d in descriptions if d.key == key))
 
 
-def equipment(
-    id: str, type: str, name: str | None = None, connected: list[str] = (), **extra
-) -> dict:
+def equipment(id: str, type: str, name: str | None = None, connected: list[str] = (), **extra) -> dict:
     """Equipment JSON as returned by BrewCreator's equipment list."""
     return {
         "id": id,
@@ -154,9 +152,7 @@ def unsupported(id: str = "p", type: str = "Plaato") -> UnsupportedEquipment:
     return UnsupportedEquipment(MagicMock(), equipment(id, type, type))
 
 
-def ha_device(
-    identifier: str, *, id: str | None = None, disabled_by=None, **attrs
-) -> SimpleNamespace:
+def ha_device(identifier: str, *, id: str | None = None, disabled_by=None, **attrs) -> SimpleNamespace:
     """A device registry entry identified by (brewcreator, identifier)."""
     return SimpleNamespace(
         id=id or f"device-{identifier}",

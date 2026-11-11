@@ -1,11 +1,11 @@
 """Actions of the BrewCreator integration."""
 
 import voluptuous as vol
-
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 
 from .api import BATCH_INFO_EQUIPMENT, BrewCreatorEquipment, FermentationType, Ferminator, Graviator
 from .const import DOMAIN
@@ -98,9 +98,7 @@ async def _async_set_batch_info(call: ServiceCall) -> None:
             ebc=data.get(ATTR_EBC),
             ibu=data.get(ATTR_IBU),
             volume=data.get(ATTR_VOLUME),
-            fermentation_type=FERMENTATION_TYPES[fermentation_type]
-            if fermentation_type is not None
-            else None,
+            fermentation_type=FERMENTATION_TYPES[fermentation_type] if fermentation_type is not None else None,
             is_logging_data=data.get(ATTR_STARTED),
         ),
         "update_failed",
@@ -138,9 +136,7 @@ def _find_batch_equipment(
     )
 
 
-def _validate_gravities(
-    equipment: BrewCreatorEquipment, og: float | None, fg: float | None
-) -> None:
+def _validate_gravities(equipment: BrewCreatorEquipment, og: float | None, fg: float | None) -> None:
     """Require the final gravity to be below the original gravity, like BrewCreator's batch info form.
 
     A gravity that isn't given is taken from the current batch info.

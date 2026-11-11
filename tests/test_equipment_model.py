@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
@@ -103,7 +103,7 @@ class NullLastActivityTimeTestCase(unittest.TestCase):
 
     def test_hydrometer_last_activity_time_is_converted_from_danish_time(self):
         value = tilt(lastActivityTime="2026-11-08T18:34:09.701+00:00").last_activity_time
-        self.assertEqual(datetime(2026, 11, 8, 17, 34, 9, 701000, timezone.utc), value)
+        self.assertEqual(datetime(2026, 11, 8, 17, 34, 9, 701000, UTC), value)
 
     def test_ferminator_without_last_activity_time(self):
         ferminator = Ferminator(MagicMock(), {"id": "f", "lastActivityTime": None})
@@ -134,9 +134,7 @@ class TemperatureRangeTestCase(unittest.TestCase):
         for temperature in (-20.1, -100, 120.1, 1000):
             with self.subTest(temperature=temperature):
                 self.assertIsNone(tilt(temperature=temperature).actual_temperature)
-                self.assertIsNone(
-                    ferminator(actualTemperature=temperature).actual_temperature_builtin_probe
-                )
+                self.assertIsNone(ferminator(actualTemperature=temperature).actual_temperature_builtin_probe)
 
     def test_bounds_and_plausible_values_are_kept(self):
         for temperature in (-20, 0, 20.2, 120):
@@ -164,9 +162,7 @@ class SignalRParsingTestCase(unittest.TestCase):
         self.assertEqual([{"type": 6}], parse_signalr_frames('{"type":6}'))
 
     def test_skips_unparsable_records(self):
-        self.assertEqual(
-            [{"type": 7}], parse_signalr_frames('not json\x1e[1]\x1e{"type":7}\x1e')
-        )
+        self.assertEqual([{"type": 7}], parse_signalr_frames('not json\x1e[1]\x1e{"type":7}\x1e'))
 
 
 if __name__ == "__main__":

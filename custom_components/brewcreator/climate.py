@@ -1,5 +1,5 @@
-from collections.abc import Awaitable
 import logging
+from collections.abc import Awaitable
 
 from homeassistant.components.climate import (
     FAN_HIGH,

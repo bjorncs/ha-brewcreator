@@ -1,14 +1,15 @@
+import json
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import json
-import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -69,7 +70,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         self,
         hass: HomeAssistant,
         api: BrewCreatorAPI,
-        entry: ConfigEntry["BrewCreatorDataUpdateCoordinator"],
+        entry: ConfigEntry[BrewCreatorDataUpdateCoordinator],
     ) -> None:
         super().__init__(
             hass,
@@ -114,9 +115,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         """Mark Ferminators that have been inactive for longer than OFFLINE_GRACE, see Ferminator.is_connected."""
         now = dt_util.utcnow()
         ferminators = [e for e in equipment.values() if isinstance(e, Ferminator)]
-        self._inactive_since = {
-            f.id: self._inactive_since.get(f.id, now) for f in ferminators if not f.is_active
-        }
+        self._inactive_since = {f.id: self._inactive_since.get(f.id, now) for f in ferminators if not f.is_active}
         for f in ferminators:
             since = self._inactive_since.get(f.id)
             f.inactive_too_long = since is not None and now - since >= OFFLINE_GRACE
@@ -219,9 +218,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         for listener in list(self._equipment_listeners):
             self._add_equipment_to(listener, equipment)
 
-    def _add_equipment_to(
-        self, listener: EquipmentListener, equipment: dict[str, BrewCreatorEquipment]
-    ) -> None:
+    def _add_equipment_to(self, listener: EquipmentListener, equipment: dict[str, BrewCreatorEquipment]) -> None:
         """Pass the listener the supported equipment it has no entities for yet."""
         added = self._equipment_listeners[listener]
         new = [
@@ -248,23 +245,17 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         """
         can_disable = bool(equipment)
         device_registry = dr.async_get(self.hass)
-        for device in dr.async_entries_for_config_entry(
-            device_registry, self.config_entry.entry_id
-        ):
+        for device in dr.async_entries_for_config_entry(device_registry, self.config_entry.entry_id):
             present = not equipment_ids(device).isdisjoint(equipment)
             if present and device.disabled_by == dr.DeviceEntryDisabler.INTEGRATION:
-                _LOGGER.info(
-                    "Enabling device %s, as it is back in BrewCreator", device_name(device)
-                )
+                _LOGGER.info("Enabling device %s, as it is back in BrewCreator", device_name(device))
                 device_registry.async_update_device(device.id, disabled_by=None)
             elif not present and can_disable and device.disabled_by is None:
                 _LOGGER.info(
                     "Disabling device %s, as it is no longer in BrewCreator",
                     device_name(device),
                 )
-                device_registry.async_update_device(
-                    device.id, disabled_by=dr.DeviceEntryDisabler.INTEGRATION
-                )
+                device_registry.async_update_device(device.id, disabled_by=dr.DeviceEntryDisabler.INTEGRATION)
 
     def _update_device_info(self, equipment: dict[str, BrewCreatorEquipment]) -> None:
         """Keep device name and firmware in sync. The registry only writes fields that changed."""
@@ -281,13 +272,9 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
                         **{key: info[key] for key in SYNCED_DEVICE_FIELDS if key in info},
                     )
             except Exception:
-                _LOGGER.exception(
-                    "Failed to update device info of %s", e.name
-                )
+                _LOGGER.exception("Failed to update device info of %s", e.name)
 
-    def _sync_unsupported_issues(
-        self, equipment_list: dict[str, BrewCreatorEquipment]
-    ) -> None:
+    def _sync_unsupported_issues(self, equipment_list: dict[str, BrewCreatorEquipment]) -> None:
         """Raise a repair issue per unsupported equipment type, and remove stale ones."""
         names_by_type: dict[str, list[str]] = {}
         for equipment in equipment_list.values():
@@ -323,9 +310,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             "known_equipment_ids": sorted(set().union(*self._equipment_listeners.values())),
             "devices_disabled_by_integration": sum(
                 device.disabled_by == dr.DeviceEntryDisabler.INTEGRATION
-                for device in dr.async_entries_for_config_entry(
-                    dr.async_get(self.hass), self.config_entry.entry_id
-                )
+                for device in dr.async_entries_for_config_entry(dr.async_get(self.hass), self.config_entry.entry_id)
             ),
         }
 
@@ -337,6 +322,6 @@ def _op_type(message: dict[str, Any]) -> str | None:
     """Return the opType of a devicetwin message, such as Connected, Disconnected or telemetry, if it has one."""
     try:
         payload = json.loads(message["arguments"][0])
-    except (KeyError, IndexError, TypeError, ValueError):
+    except KeyError, IndexError, TypeError, ValueError:
         return None
     return payload.get("opType") if isinstance(payload, dict) else None

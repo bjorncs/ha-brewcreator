@@ -12,7 +12,11 @@ from homeassistant.const import (
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import (
     config_validation as cv,
+)
+from homeassistant.helpers import (
     device_registry as dr,
+)
+from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -47,9 +51,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]) -> bool:
     """Set up devices from BrewCreator such as Ferminator, Tilt and Graviator"""
     api = BrewCreatorAPI(
         entry.data[CONF_USERNAME],
@@ -65,17 +67,13 @@ async def async_setup_entry(
         # HA doesn't unload entries when it stops, and closes the shared session soon after
         await coordinator.close()
 
-    entry.async_on_unload(
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_websocket)
-    )
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_websocket))
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def async_unload_entry(
-    hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]) -> bool:
     """Unload a config entry."""
     # Closed first, as HA skips the coordinator's shutdown if unloading a platform fails. Closing again is harmless.
     await entry.runtime_data.close()
@@ -96,9 +94,7 @@ async def async_remove_config_entry_device(
     return True
 
 
-async def async_migrate_entry(
-    hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]
-) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]) -> bool:
     """Migrate an old config entry.
 
     Version 2 identifies devices by equipment ID instead of serial number. The equipment ID is taken from the
@@ -128,9 +124,7 @@ def _migrate_device_identifiers(hass: HomeAssistant, entry: ConfigEntry) -> None
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
         ids = {
             equipment_id
-            for entity in er.async_entries_for_device(
-                entity_registry, device.id, include_disabled_entities=True
-            )
+            for entity in er.async_entries_for_device(entity_registry, device.id, include_disabled_entities=True)
             if entity.config_entry_id == entry.entry_id
             and (equipment_id := equipment_id_from_unique_id(entity.unique_id))
         }

@@ -1,23 +1,21 @@
 import asyncio
 import json
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.helpers.device_registry import DeviceEntryDisabler
-
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.brewcreator import async_remove_config_entry_device
-from custom_components.brewcreator.api import BrewCreatorEquipment, BrewCreatorError
+from custom_components.brewcreator.api import BrewCreatorEquipment, BrewCreatorError, Hydrometer
 from custom_components.brewcreator.coordinator import (
     DISCONNECT_REFRESH_DELAY,
     OFFLINE_GRACE,
     BrewCreatorData,
     BrewCreatorDataUpdateCoordinator,
 )
-from custom_components.brewcreator.api import Hydrometer
 from custom_components.brewcreator.entity import register_entities
 from tests.factories import DEVICETWIN_MESSAGE, ferminator, sensor, tilt, unsupported
 from tests.factories import ha_device as device
@@ -64,9 +62,7 @@ class DeviceSyncTestCase(unittest.TestCase):
         self.registry.async_update_device.reset_mock()
         self.coordinator.last_update_success = success
         if success:
-            self.coordinator.data = BrewCreatorData(
-                equipment={e.id: e for e in equipment}
-            )
+            self.coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
         self.coordinator._async_refresh_finished()
 
     def disabled_by_updates(self) -> dict[str, object]:
@@ -187,17 +183,13 @@ class SyncIsolationTestCase(unittest.TestCase):
 
         with self.assertLogs("custom_components.brewcreator.entity", "ERROR"):
             register_entities(entry, add_entities, Hydrometer, lambda c, id: [sensor(c, id, "sg")])
-        self.assertEqual(
-            ["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]]
-        )
+        self.assertEqual(["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]])
 
     @patch("custom_components.brewcreator.coordinator.ir", MagicMock())
     @patch("custom_components.brewcreator.coordinator.dr", MagicMock())
     def test_equipment_whose_entities_failed_is_retried(self):
         coordinator = make_coordinator()
-        coordinator.data = BrewCreatorData(
-            equipment={"bad": tilt("bad", color="TiltUnknown"), "t1": tilt("t1")}
-        )
+        coordinator.data = BrewCreatorData(equipment={"bad": tilt("bad", color="TiltUnknown"), "t1": tilt("t1")})
         entry = MagicMock()
         entry.runtime_data = coordinator
         add_entities = MagicMock()
@@ -208,9 +200,7 @@ class SyncIsolationTestCase(unittest.TestCase):
         coordinator._async_refresh_finished()
         # Only the equipment that failed is added again
         self.assertEqual(2, add_entities.call_count)
-        self.assertEqual(
-            ["brewcreator_bad_sg"], [e.unique_id for e in add_entities.call_args.args[0]]
-        )
+        self.assertEqual(["brewcreator_bad_sg"], [e.unique_id for e in add_entities.call_args.args[0]])
 
         coordinator._async_refresh_finished()
         self.assertEqual(2, add_entities.call_count)
@@ -225,7 +215,7 @@ class UpdateDataTestCase(unittest.IsolatedAsyncioTestCase):
             await coordinator._async_update_data()
 
 
-T0 = datetime(2026, 11, 11, 18, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 11, 11, 18, 0, tzinfo=UTC)
 
 
 @patch("custom_components.brewcreator.coordinator.dt_util.utcnow")
@@ -329,18 +319,12 @@ class EntityRegistrationTestCase(unittest.TestCase):
 
         register_entities(entry, add_entities, Hydrometer, lambda c, id: [sensor(c, id, "sg")])
         entry.async_on_unload.assert_called_once()
-        self.assertEqual(
-            ["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]]
-        )
+        self.assertEqual(["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]])
         self.assertEqual({"update_before_add": False}, add_entities.call_args.kwargs)
 
-        coordinator.data = BrewCreatorData(
-            equipment={"t1": tilt("t1"), "t2": tilt("t2"), "f": ferminator()}
-        )
+        coordinator.data = BrewCreatorData(equipment={"t1": tilt("t1"), "t2": tilt("t2"), "f": ferminator()})
         coordinator._async_refresh_finished()
-        self.assertEqual(
-            ["brewcreator_t2_sg"], [e.unique_id for e in add_entities.call_args.args[0]]
-        )
+        self.assertEqual(["brewcreator_t2_sg"], [e.unique_id for e in add_entities.call_args.args[0]])
 
 
 LISTENER = MagicMock()
@@ -352,9 +336,7 @@ class RemoveDeviceTestCase(unittest.TestCase):
         coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
         coordinator._equipment_listeners = {LISTENER: {"t1"}}
         entry = SimpleNamespace(runtime_data=coordinator)
-        result = asyncio.run(
-            async_remove_config_entry_device(MagicMock(), entry, device("t1"))
-        )
+        result = asyncio.run(async_remove_config_entry_device(MagicMock(), entry, device("t1")))
         return result, coordinator._equipment_listeners[LISTENER]
 
     def test_device_still_in_brewcreator_cannot_be_removed(self):

@@ -1,6 +1,6 @@
+import unittest
 from datetime import UTC, datetime
 from types import SimpleNamespace
-import unittest
 from unittest.mock import MagicMock
 
 from custom_components.brewcreator.api import BATCH_INFO_EQUIPMENT, resolve_links
@@ -148,9 +148,7 @@ class RegistrationTestCase(unittest.TestCase):
         c = coordinator()
         entry = SimpleNamespace(runtime_data=c, async_on_unload=MagicMock())
         created = []
-        register_entities(
-            entry, MagicMock(), BATCH_INFO_EQUIPMENT, lambda coordinator, id: created.append(id) or []
-        )
+        register_entities(entry, MagicMock(), BATCH_INFO_EQUIPMENT, lambda coordinator, id: created.append(id) or [])
         add_entities = c.async_add_equipment_listener.call_args.args[0]
         add_entities([ferminator(), graviator("g"), tilt("t")])
         self.assertEqual(["f", "g"], created)

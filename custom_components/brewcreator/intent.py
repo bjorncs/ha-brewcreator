@@ -14,14 +14,17 @@ from dataclasses import dataclass
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import (
     device_registry as dr,
+)
+from homeassistant.helpers import (
     entity_registry as er,
+)
+from homeassistant.helpers import (
     intent,
 )
 from homeassistant.util import dt as dt_util
@@ -53,8 +56,8 @@ from .services import (
     ATTR_VOLUME,
     BATCH_FIELDS,
     FERMENTATION_TYPES,
-    MAX_TEXT_LENGTH,
     GRAVITY,
+    MAX_TEXT_LENGTH,
     POSITIVE_INTEGER,
     SERVICE_SET_BATCH_INFO,
 )
@@ -139,9 +142,7 @@ def _of_type(targets: list[_Target], equipment_type: EquipmentTypes) -> list[_Ta
     return [t for t in targets if isinstance(t.equipment, equipment_type)]
 
 
-def _match_target(
-    targets: list[_Target], name: str | None, kind: str, default: Iterable[_Target] = ()
-) -> _Target:
+def _match_target(targets: list[_Target], name: str | None, kind: str, default: Iterable[_Target] = ()) -> _Target:
     """Return the target referred to by name, or the only default target when no name is given.
 
     A name matches a device's name or BrewCreator name regardless of case, or else whole words of a single one.
@@ -246,16 +247,18 @@ def _without_none(status: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ferminator_status(ferminator: Ferminator) -> dict[str, Any]:
-    return _without_none({
-        "name": ferminator.name,
-        "connected": ferminator.is_connected,
-        "temperature_c": ferminator.actual_temperature,
-        "built_in_probe_temperature_c": ferminator.actual_temperature_builtin_probe,
-        "target_temperature_c": ferminator.target_temperature,
-        "mode": ferminator.mode.name.lower() if ferminator.mode is not None else None,
-        "temperature_regulation": ferminator.is_regulating,
-        "fan_speed": FAN_SPEEDS.get(ferminator.fan_speed),
-    })
+    return _without_none(
+        {
+            "name": ferminator.name,
+            "connected": ferminator.is_connected,
+            "temperature_c": ferminator.actual_temperature,
+            "built_in_probe_temperature_c": ferminator.actual_temperature_builtin_probe,
+            "target_temperature_c": ferminator.target_temperature,
+            "mode": ferminator.mode.name.lower() if ferminator.mode is not None else None,
+            "temperature_regulation": ferminator.is_regulating,
+            "fan_speed": FAN_SPEEDS.get(ferminator.fan_speed),
+        }
+    )
 
 
 def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
@@ -282,13 +285,15 @@ def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
 
 def _hydrometer_status(hydrometer: Hydrometer) -> dict[str, Any]:
     last_reading = hydrometer.last_activity_time
-    return _without_none({
-        "name": hydrometer.name,
-        "specific_gravity": hydrometer.specific_gravity,
-        "temperature_c": hydrometer.actual_temperature,
-        "abv_percent": hydrometer.abv,
-        "last_reading": last_reading.isoformat() if last_reading is not None else None,
-    })
+    return _without_none(
+        {
+            "name": hydrometer.name,
+            "specific_gravity": hydrometer.specific_gravity,
+            "temperature_c": hydrometer.actual_temperature,
+            "abv_percent": hydrometer.abv,
+            "last_reading": last_reading.isoformat() if last_reading is not None else None,
+        }
+    )
 
 
 def _speech(name: str, status: dict[str, Any]) -> str:
@@ -339,9 +344,7 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
             ): _TEXT,
             vol.Optional(ATTR_BATCH_NAME, description="Name of the batch."): _TEXT,
             vol.Optional(ATTR_OWNER, description="The brewer of the batch."): _TEXT,
-            vol.Optional(
-                ATTR_BEER_STYLE, description="Style of the beer, such as IPA or Scottish Export."
-            ): _TEXT,
+            vol.Optional(ATTR_BEER_STYLE, description="Style of the beer, such as IPA or Scottish Export."): _TEXT,
             vol.Optional(
                 ATTR_ORIGINAL_GRAVITY,
                 description="Specific gravity before fermentation, such as 1.058. Must be above the final gravity.",
@@ -370,9 +373,7 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
         targets = _of_type(_exposed_targets(intent_obj.hass, intent_obj.assistant), BATCH_INFO_EQUIPMENT)
         # A linked Graviator can be named, so the action can explain that it has its Ferminator's batch info
         unlinked = [t for t in targets if t.equipment.batch_owner is t.equipment]
-        target = _match_target(
-            targets, _slot_value(slots, SLOT_NAME), "Ferminator or Graviator", default=unlinked
-        )
+        target = _match_target(targets, _slot_value(slots, SLOT_NAME), "Ferminator or Graviator", default=unlinked)
         fields = {f: _slot_value(slots, f) for f in BATCH_FIELDS if f in slots}
         if not fields:
             raise intent.IntentHandleError(f"Give at least one of: {', '.join(BATCH_FIELDS)}")
@@ -422,9 +423,7 @@ class LinkHydrometerIntentHandler(intent.IntentHandler):
         hass = intent_obj.hass
         targets = _exposed_targets(hass, intent_obj.assistant)
         ferminators = _of_type(targets, Ferminator)
-        target = _match_target(
-            ferminators, _slot_value(slots, SLOT_NAME), "Ferminator", default=ferminators
-        )
+        target = _match_target(ferminators, _slot_value(slots, SLOT_NAME), "Ferminator", default=ferminators)
         ferminator: Ferminator = target.equipment
         # Only exposed hydrometers can be linked. The options are the select's, which may include an ID suffix.
         exposed_ids = {t.equipment.id for t in targets}
@@ -439,9 +438,7 @@ class LinkHydrometerIntentHandler(intent.IntentHandler):
         try:
             await ferminator.link_hydrometer(None if option == NO_HYDROMETER else hydrometers[option])
         except BrewCreatorError as err:
-            raise intent.IntentHandleError(
-                f"Failed to change the hydrometer linked to {target.name}: {err}"
-            ) from err
+            raise intent.IntentHandleError(f"Failed to change the hydrometer linked to {target.name}: {err}") from err
         await target.coordinator.async_refresh()
 
         response = intent_obj.create_response()

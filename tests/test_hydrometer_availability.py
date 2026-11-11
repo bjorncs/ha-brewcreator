@@ -36,9 +36,7 @@ class HydrometerAvailabilityTestCase(unittest.TestCase):
         self.assertFalse(self.is_available(hydrometer()))
 
     def test_tilt_without_data_is_unavailable(self):
-        self.assertFalse(
-            self.is_available(hydrometer(sg=None, temperature=None), ferminator())
-        )
+        self.assertFalse(self.is_available(hydrometer(sg=None, temperature=None), ferminator()))
 
     def test_tilt_with_only_temperature_is_available(self):
         self.assertTrue(self.is_available(hydrometer(sg=0), ferminator()))
@@ -52,14 +50,10 @@ class HydrometerAvailabilityTestCase(unittest.TestCase):
         self.assertTrue(self.is_available(hydrometer(Graviator, "t"), ferminator()))
 
     def test_graviator_linked_to_disconnected_ferminator_is_unavailable(self):
-        self.assertFalse(
-            self.is_available(hydrometer(Graviator, "t"), ferminator("Disconnected"))
-        )
+        self.assertFalse(self.is_available(hydrometer(Graviator, "t"), ferminator("Disconnected")))
 
     def test_unlinked_graviator_with_valid_reading_is_available(self):
-        self.assertTrue(
-            self.is_available(hydrometer(Graviator, "t"), ferminator(connected=[]))
-        )
+        self.assertTrue(self.is_available(hydrometer(Graviator, "t"), ferminator(connected=[])))
 
     def test_unlinked_graviator_without_valid_reading_is_unavailable(self):
         self.assertFalse(self.is_available(hydrometer(Graviator, "t", sg=0)))
@@ -70,9 +64,7 @@ class HydrometerAvailabilityTestCase(unittest.TestCase):
         self.assertFalse(entity.available)
 
     def test_unavailable_when_last_update_failed(self):
-        self.assertFalse(
-            self.is_available(hydrometer(), ferminator(), last_update_success=False)
-        )
+        self.assertFalse(self.is_available(hydrometer(), ferminator(), last_update_success=False))
 
 
 class HydrometerLinkTestCase(unittest.TestCase):

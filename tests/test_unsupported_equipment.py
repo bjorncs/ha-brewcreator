@@ -62,9 +62,7 @@ class ListEquipmentTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_graviator_is_hydrometer(self):
         result = await self.list_equipment(
-            equipment(
-                "f", "Ferminator", "Ferminator", connected=["g"], actualTemperature=20.0
-            ),
+            equipment("f", "Ferminator", "Ferminator", connected=["g"], actualTemperature=20.0),
             equipment("g", "Graviator", "Graviator", sg=1.012, actualTemperature=18.5),
         )
 
@@ -96,9 +94,7 @@ class HydrometerDeviceInfoTestCase(unittest.TestCase):
 
 class UnsupportedIssuesTestCase(unittest.TestCase):
     def sync(self, coordinator, equipment_list):
-        BrewCreatorDataUpdateCoordinator._sync_unsupported_issues(
-            coordinator, equipment_list
-        )
+        BrewCreatorDataUpdateCoordinator._sync_unsupported_issues(coordinator, equipment_list)
 
     @patch("custom_components.brewcreator.coordinator.ir")
     def test_creates_and_deletes_issues(self, ir):
@@ -111,15 +107,11 @@ class UnsupportedIssuesTestCase(unittest.TestCase):
         ir.async_create_issue.assert_called_once()
         args, kwargs = ir.async_create_issue.call_args
         self.assertEqual("unsupported_equipment_Plaato", args[2])
-        self.assertEqual(
-            {"type": "Plaato", "names": "P1"}, kwargs["translation_placeholders"]
-        )
+        self.assertEqual({"type": "Plaato", "names": "P1"}, kwargs["translation_placeholders"])
         ir.async_delete_issue.assert_not_called()
 
         self.sync(coordinator, {"t": tilt})
-        ir.async_delete_issue.assert_called_once_with(
-            coordinator.hass, "brewcreator", "unsupported_equipment_Plaato"
-        )
+        ir.async_delete_issue.assert_called_once_with(coordinator.hass, "brewcreator", "unsupported_equipment_Plaato")
         self.assertEqual(set(), coordinator._unsupported_issue_ids)
 
 

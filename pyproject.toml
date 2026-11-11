@@ -1,0 +1,15 @@
+# Tool configuration only; the integration is not packaged.
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.mypy]
+python_version = "3.14"
+files = ["custom_components/brewcreator"]
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.codespell]
+ignore-words-list = "hass,equipments"  # equipments: BrewCreator API paths
+skip = ".git,.venv,assets"

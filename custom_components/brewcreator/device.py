@@ -35,9 +35,7 @@ def device_info(equipment: BrewCreatorEquipment) -> DeviceInfo:
     return info
 
 
-def find_device(
-    registry: DeviceRegistry, equipment_id: str, config_entry_id: str
-) -> DeviceEntry | None:
+def find_device(registry: DeviceRegistry, equipment_id: str, config_entry_id: str) -> DeviceEntry | None:
     """Return the config entry's device of the equipment, if registered.
 
     HA 2026.11 deprecated async_get_device, as identifiers are only unique within a config entry since 2026.8.

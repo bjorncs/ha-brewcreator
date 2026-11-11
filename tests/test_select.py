@@ -31,9 +31,7 @@ class LinkableHydrometersTestCase(unittest.TestCase):
             graviator("g", name="Graviator"),
             unsupported("p"),
         ).data.equipment
-        self.assertEqual(
-            ["g", "t3", "t1"], [h.id for h in linkable_hydrometers(f, equipment)]
-        )
+        self.assertEqual(["g", "t3", "t1"], [h.id for h in linkable_hydrometers(f, equipment)])
 
 
 class HydrometerSelectTestCase(unittest.TestCase):
@@ -76,18 +74,14 @@ class HydrometerSelectTestCase(unittest.TestCase):
         )
         asyncio.run(entity.async_select_option("Tilt Orange"))
         f = entity.coordinator.data.equipment["f"]
-        f._api._update_equipment_state.assert_awaited_once_with(
-            "f", {"connectedEquipments": ["t2"]}
-        )
+        f._api._update_equipment_state.assert_awaited_once_with("f", {"connectedEquipments": ["t2"]})
         entity.coordinator.async_refresh.assert_awaited_once()
 
     def test_selecting_none_unlinks(self):
         entity = setup(ferminator("f", connected=["t1"]), tilt("t1", name="Tilt Black"))
         asyncio.run(entity.async_select_option("none"))
         f = entity.coordinator.data.equipment["f"]
-        f._api._update_equipment_state.assert_awaited_once_with(
-            "f", {"connectedEquipments": []}
-        )
+        f._api._update_equipment_state.assert_awaited_once_with("f", {"connectedEquipments": []})
 
     def test_failed_link_raises(self):
         entity = setup(ferminator("f"), tilt("t1", name="Tilt Black"))

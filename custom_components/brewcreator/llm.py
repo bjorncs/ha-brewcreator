@@ -47,9 +47,7 @@ def async_get_tools(hass: HomeAssistant, llm_context: LLMContext, api_id: str) -
         if handler.intent_type not in available:
             continue
         name, title, annotations, _ = LLM_INTENTS[handler.intent_type]
-        tools.append(
-            IntentTool(f"{DOMAIN}__{name}", handler, title=title, integration=DOMAIN, annotations=annotations)
-        )
+        tools.append(IntentTool(f"{DOMAIN}__{name}", handler, title=title, integration=DOMAIN, annotations=annotations))
     return LLMTools(tools=tools) if tools else None
 
 

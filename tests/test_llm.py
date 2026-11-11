@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from homeassistant.core import Context
@@ -11,7 +11,8 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
 )
 from custom_components.brewcreator.llm import async_get_tools
-from tests.factories import coordinator as make_coordinator, ferminator, graviator, ha_device, tilt, tool_parameters
+from tests.factories import coordinator as make_coordinator
+from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
 
 
 class LLMToolsTestCase(unittest.TestCase):
@@ -35,8 +36,8 @@ class LLMToolsTestCase(unittest.TestCase):
 
     def setup(self, *equipment, exposed=None):
         devices = {e.id: ha_device(e.id, name=e.name) for e in equipment}
-        self.dr.async_get.return_value.async_get_device_by_identifier.side_effect = (
-            lambda identifier, config_entry_id: devices.get(identifier[1])
+        self.dr.async_get.return_value.async_get_device_by_identifier.side_effect = lambda identifier, config_entry_id: (
+            devices.get(identifier[1])
         )
         self.er.async_entries_for_device.side_effect = lambda registry, device_id: [
             SimpleNamespace(entity_id=f"sensor.{device_id}")
