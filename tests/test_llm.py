@@ -5,14 +5,13 @@ from unittest.mock import MagicMock, patch
 from homeassistant.core import Context
 from homeassistant.helpers.llm import LLMContext
 
-from custom_components.brewcreator.coordinator import BrewCreatorData
 from custom_components.brewcreator.intent import (
     GetFermentationStatusIntentHandler,
     LinkHydrometerIntentHandler,
     SetBatchInfoIntentHandler,
 )
 from custom_components.brewcreator.llm import async_get_tools
-from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
+from tests.factories import coordinator as make_coordinator, ferminator, graviator, ha_device, tilt, tool_parameters
 
 
 class LLMToolsTestCase(unittest.TestCase):
@@ -46,7 +45,7 @@ class LLMToolsTestCase(unittest.TestCase):
         self.should_expose.side_effect = lambda hass, assistant, entity_id: (
             assistant == "conversation" and entity_id.removeprefix("sensor.device-") in exposed
         )
-        coordinator = MagicMock(data=BrewCreatorData(equipment={e.id: e for e in equipment}))
+        coordinator = make_coordinator(*equipment)
         self.hass = MagicMock()
         self.hass.config_entries.async_loaded_entries.side_effect = lambda domain: (
             [SimpleNamespace(entry_id="entry", runtime_data=coordinator)] if domain == "brewcreator" else []

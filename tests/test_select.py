@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
@@ -8,38 +8,29 @@ from homeassistant.exceptions import HomeAssistantError
 from custom_components.brewcreator.api import BrewCreatorError, linkable_hydrometers
 from custom_components.brewcreator.coordinator import BrewCreatorData
 from custom_components.brewcreator.select import FerminatorHydrometerEntity
-from tests.factories import ferminator, graviator, tilt, unsupported
+from tests.factories import coordinator, ferminator, graviator, tilt, unsupported
 
 
 def setup(*equipment):
     """Return the entity of Ferminator "f" among the equipment, with links resolved like list_equipment does."""
-    for e in equipment:
-        if hasattr(e, "_update_connected_equipment"):
-            e._update_connected_equipment(list(equipment))
-    by_id = {e.id: e for e in equipment}
-    by_id["f"]._api._update_equipment_state = AsyncMock(return_value=None)
-    coordinator = MagicMock()
-    coordinator.async_refresh = AsyncMock()
-    coordinator.data = BrewCreatorData(equipment=by_id)
-    return FerminatorHydrometerEntity(coordinator, "f")
+    c = coordinator(*equipment)
+    c.data.equipment["f"]._api._update_equipment_state = AsyncMock(return_value=None)
+    return FerminatorHydrometerEntity(c, "f")
 
 
 class LinkableHydrometersTestCase(unittest.TestCase):
     def test_hydrometers_not_linked_elsewhere_ordered_by_name(self):
         f = ferminator("f", connected=["t1"])
         other = ferminator("o", connected=["t2"])
-        equipment = {
-            e.id: e
-            for e in (
-                f,
-                other,
-                tilt("t1", name="Tilt Orange"),
-                tilt("t2", name="Tilt Red"),
-                tilt("t3", name="Tilt Black"),
-                graviator("g", name="Graviator"),
-                unsupported("p"),
-            )
-        }
+        equipment = coordinator(
+            f,
+            other,
+            tilt("t1", name="Tilt Orange"),
+            tilt("t2", name="Tilt Red"),
+            tilt("t3", name="Tilt Black"),
+            graviator("g", name="Graviator"),
+            unsupported("p"),
+        ).data.equipment
         self.assertEqual(
             ["g", "t3", "t1"], [h.id for h in linkable_hydrometers(f, equipment)]
         )

@@ -26,7 +26,7 @@ def device_info(equipment: BrewCreatorEquipment) -> DeviceInfo:
         identifiers={(DOMAIN, equipment.id)},
         manufacturer="Brewolution",
         serial_number=equipment.serial_number,
-        model=equipment.equipment_type.value,
+        model=equipment.raw_type,
         name=equipment.name,
     )
     if isinstance(equipment, Ferminator):

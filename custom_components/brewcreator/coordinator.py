@@ -1,13 +1,13 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
 import logging
 from typing import Any
 
-import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import async_call_later
@@ -15,11 +15,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import (
+    SUPPORTED_EQUIPMENT,
     BrewCreatorAPI,
     BrewCreatorEquipment,
     BrewCreatorError,
     Ferminator,
-    Hydrometer,
     UnsupportedEquipment,
 )
 from .const import DOMAIN
@@ -60,10 +60,6 @@ class BrewCreatorData:
 
 EquipmentListener = Callable[[list[BrewCreatorEquipment]], set[str]]
 """Called with equipment that should have entities added. Returns the IDs whose entities could not be created."""
-
-
-def is_supported(equipment: BrewCreatorEquipment) -> bool:
-    return isinstance(equipment, (Ferminator, Hydrometer))
 
 
 class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
@@ -109,7 +105,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
     async def _async_update_data(self) -> BrewCreatorData:
         try:
             equipment = await self._api.list_equipment()
-        except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
+        except BrewCreatorError as err:
             raise UpdateFailed(f"Failed to list equipment: {err}") from err
         self._track_inactive_ferminators(equipment)
         return BrewCreatorData(equipment=equipment)
@@ -155,8 +151,25 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             self._disconnect_refresh_unsub = None
 
     async def async_shutdown(self) -> None:
+        """Stop the websocket and refreshes. HA calls this when the entry is unloaded or its setup fails."""
         self._cancel_disconnect_refresh()
+        await self.close()
         await super().async_shutdown()
+
+    async def async_send(self, update: Awaitable[None], translation_key: str, name: str) -> None:
+        """Send an update to BrewCreator, then refresh so the new state shows when the action returns.
+
+        A failed update raises HomeAssistantError, with the translation key and the equipment's name.
+        """
+        try:
+            await update
+        except BrewCreatorError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=translation_key,
+                translation_placeholders={"name": name, "error": str(err)},
+            ) from err
+        await self.async_refresh()
 
     @callback
     def _async_refresh_finished(self) -> None:
@@ -214,7 +227,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         new = [
             e
             for equipment_id, e in equipment.items()
-            if is_supported(e) and equipment_id not in added
+            if isinstance(e, SUPPORTED_EQUIPMENT) and equipment_id not in added
         ]
         if not new:
             return
@@ -257,7 +270,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
         """Keep device name and firmware in sync. The registry only writes fields that changed."""
         device_registry = dr.async_get(self.hass)
         for e in equipment.values():
-            if not is_supported(e):
+            if not isinstance(e, SUPPORTED_EQUIPMENT):
                 continue
             try:
                 info = device_info(e)
@@ -315,10 +328,6 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
                 )
             ),
         }
-
-    @property
-    def api(self) -> BrewCreatorAPI:
-        return self._api
 
     async def close(self) -> None:
         await self._api.close()

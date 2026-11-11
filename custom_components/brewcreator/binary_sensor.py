@@ -8,8 +8,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .api import BATCH_INFO_EQUIPMENT
 from .coordinator import BrewCreatorDataUpdateCoordinator
-from .entity import BatchInfoEntity, register_batch_info_entities
+from .entity import BatchInfoEntity, register_entities
 
 
 async def async_setup_entry(
@@ -17,9 +18,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
-    register_batch_info_entities(
+    register_entities(
         entry,
         async_add_entities,
+        BATCH_INFO_EQUIPMENT,
         lambda coordinator, id: [BatchStartedEntity(coordinator, id)],
     )
 

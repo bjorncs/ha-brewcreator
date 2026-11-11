@@ -57,13 +57,9 @@ async def async_setup_entry(
         BrewCreatorTokenStore(hass),
         async_get_clientsession(hass),
     )
+    # The coordinator closes the API when the entry is unloaded, or when this setup fails and HA retries it
     coordinator = BrewCreatorDataUpdateCoordinator(hass, api, entry)
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except Exception:
-        # The websocket is started before the first refresh. HA retries setup with a new coordinator, so stop it.
-        await coordinator.close()
-        raise
+    await coordinator.async_config_entry_first_refresh()
 
     async def _async_stop_websocket(_: Event) -> None:
         # HA doesn't unload entries when it stops, and closes the shared session soon after
@@ -81,8 +77,8 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: ConfigEntry[BrewCreatorDataUpdateCoordinator]
 ) -> bool:
     """Unload a config entry."""
-    coordinator = entry.runtime_data
-    await coordinator.close()
+    # Closed first, as HA skips the coordinator's shutdown if unloading a platform fails. Closing again is harmless.
+    await entry.runtime_data.close()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

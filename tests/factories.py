@@ -1,8 +1,9 @@
 """Builders for BrewCreator equipment and Home Assistant registry entries used across the tests."""
 
 import json
+from functools import partial
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.helpers import intent, llm
 import probatio
@@ -14,8 +15,19 @@ from custom_components.brewcreator.api import (
     Hydrometer,
     Tilt,
     UnsupportedEquipment,
+    resolve_links,
 )
-from custom_components.brewcreator.coordinator import BrewCreatorData
+from custom_components.brewcreator.coordinator import (
+    BrewCreatorData,
+    BrewCreatorDataUpdateCoordinator,
+)
+from custom_components.brewcreator.sensor import (
+    BATCH_INFO_SENSORS,
+    FERMINATOR_SENSORS,
+    HYDROMETER_SENSORS,
+    BatchInfoSensor,
+    BrewCreatorSensor,
+)
 
 BATCH = {
     "brewName": "Christmas Miracle",
@@ -34,11 +46,26 @@ BATCH = {
 
 
 def coordinator(*equipment: BrewCreatorEquipment, last_update_success: bool = True) -> MagicMock:
-    """A coordinator holding the equipment, as of a refresh that succeeded unless told otherwise."""
+    """A coordinator holding the equipment with links resolved, as of a refresh that succeeded unless told otherwise.
+
+    Updates are sent with the coordinator's own async_send, and async_refresh is an AsyncMock.
+    """
     coordinator = MagicMock()
     coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
+    resolve_links(coordinator.data.equipment)
     coordinator.last_update_success = last_update_success
+    coordinator.async_refresh = AsyncMock()
+    coordinator.async_send = partial(BrewCreatorDataUpdateCoordinator.async_send, coordinator)
     return coordinator
+
+
+def sensor(coordinator: MagicMock, id: str, key: str, *, batch_info: bool = False) -> BrewCreatorSensor:
+    """The sensor of the equipment with the description key, a batch info sensor if told so."""
+    if batch_info:
+        return BatchInfoSensor(coordinator, id, next(d for d in BATCH_INFO_SENSORS if d.key == key))
+    equipment = coordinator.data.equipment[id]
+    descriptions = FERMINATOR_SENSORS if isinstance(equipment, Ferminator) else HYDROMETER_SENSORS
+    return BrewCreatorSensor(coordinator, id, next(d for d in descriptions if d.key == key))
 
 
 def equipment(

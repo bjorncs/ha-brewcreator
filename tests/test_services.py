@@ -7,12 +7,11 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import voluptuous as vol
 
 from custom_components.brewcreator.api import BrewCreatorError
-from custom_components.brewcreator.coordinator import BrewCreatorData
 from custom_components.brewcreator.services import (
     SET_BATCH_INFO_SCHEMA,
     _async_set_batch_info,
 )
-from tests.factories import BATCH, ferminator, graviator, ha_device, tilt
+from tests.factories import BATCH, coordinator as make_coordinator, ferminator, graviator, ha_device, tilt
 
 def batch_ferminator(**batch):
     f = ferminator(**{**BATCH, **batch})
@@ -23,9 +22,7 @@ def batch_ferminator(**batch):
 @patch("custom_components.brewcreator.services.dr")
 class SetBatchInfoTestCase(unittest.TestCase):
     def call(self, dr, equipment, device_identifier="f", loaded=True, **data):
-        coordinator = MagicMock()
-        coordinator.async_refresh = AsyncMock()
-        coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
+        coordinator = make_coordinator(*equipment)
         device = ha_device(device_identifier)
         dr.async_get.return_value.async_get.side_effect = (
             lambda device_id: device if device_id == device.id else None

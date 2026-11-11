@@ -1,4 +1,4 @@
-"""Config flow for Ferminator Connect integration."""
+"""Config flow for the BrewCreator integration."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import BrewCreatorAPI, BrewCreatorInvalidCredentialsError
@@ -27,25 +26,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect.
-
-    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
-    """
-    api = BrewCreatorAPI(
-        data[CONF_USERNAME],
-        data[CONF_PASSWORD],
-        BrewCreatorTokenStore(hass),
-        async_get_clientsession(hass),
-    )
-
-    await api.verify_username_and_password()
-
-    return {"title": "BrewCreator"}
-
-
 class BrewCreatorConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Ferminator Connect."""
+    """Handle a config flow for BrewCreator."""
 
     VERSION = 2
 
@@ -56,7 +38,12 @@ class BrewCreatorConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
+                await BrewCreatorAPI(
+                    user_input[CONF_USERNAME],
+                    user_input[CONF_PASSWORD],
+                    BrewCreatorTokenStore(self.hass),
+                    async_get_clientsession(self.hass),
+                ).verify_username_and_password()
             except aiohttp.ClientConnectionError:
                 errors["base"] = "cannot_connect"
             except BrewCreatorInvalidCredentialsError:
@@ -65,7 +52,7 @@ class BrewCreatorConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                return self.async_create_entry(title=info["title"], data=user_input)
+                return self.async_create_entry(title="BrewCreator", data=user_input)
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors

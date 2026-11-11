@@ -17,9 +17,9 @@ from custom_components.brewcreator.coordinator import (
     BrewCreatorData,
     BrewCreatorDataUpdateCoordinator,
 )
-from custom_components.brewcreator.entity import register_hydrometer_entities
-from custom_components.brewcreator.sensor import HydrometerSpecificGravityEntity
-from tests.factories import DEVICETWIN_MESSAGE, ferminator, tilt, unsupported
+from custom_components.brewcreator.api import Hydrometer
+from custom_components.brewcreator.entity import register_entities
+from tests.factories import DEVICETWIN_MESSAGE, ferminator, sensor, tilt, unsupported
 from tests.factories import ha_device as device
 
 
@@ -33,6 +33,7 @@ def make_coordinator() -> BrewCreatorDataUpdateCoordinator:
     coordinator._unsupported_issue_ids = set()
     coordinator._disconnect_refresh_unsub = None
     coordinator._inactive_since = {}
+    coordinator._api = MagicMock(close=AsyncMock())
     return coordinator
 
 
@@ -185,9 +186,7 @@ class SyncIsolationTestCase(unittest.TestCase):
         add_entities = MagicMock()
 
         with self.assertLogs("custom_components.brewcreator.entity", "ERROR"):
-            register_hydrometer_entities(
-                entry, add_entities, lambda c, id: [HydrometerSpecificGravityEntity(c, id)]
-            )
+            register_entities(entry, add_entities, Hydrometer, lambda c, id: [sensor(c, id, "sg")])
         self.assertEqual(
             ["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]]
         )
@@ -203,9 +202,7 @@ class SyncIsolationTestCase(unittest.TestCase):
         entry.runtime_data = coordinator
         add_entities = MagicMock()
         with self.assertLogs("custom_components.brewcreator.entity", "ERROR"):
-            register_hydrometer_entities(
-                entry, add_entities, lambda c, id: [HydrometerSpecificGravityEntity(c, id)]
-            )
+            register_entities(entry, add_entities, Hydrometer, lambda c, id: [sensor(c, id, "sg")])
 
         coordinator.data = BrewCreatorData(equipment={"bad": tilt("bad"), "t1": tilt("t1")})
         coordinator._async_refresh_finished()
@@ -314,6 +311,7 @@ class DisconnectRefreshTestCase(unittest.IsolatedAsyncioTestCase):
         ) as super_shutdown:
             await self.coordinator.async_shutdown()
         unsub.assert_called_once()
+        self.coordinator._api.close.assert_awaited_once()
         super_shutdown.assert_awaited_once()
         self.assertIsNone(self.coordinator._disconnect_refresh_unsub)
 
@@ -329,11 +327,7 @@ class EntityRegistrationTestCase(unittest.TestCase):
         entry.runtime_data = coordinator
         add_entities = MagicMock()
 
-        register_hydrometer_entities(
-            entry,
-            add_entities,
-            lambda c, id: [HydrometerSpecificGravityEntity(c, id)],
-        )
+        register_entities(entry, add_entities, Hydrometer, lambda c, id: [sensor(c, id, "sg")])
         entry.async_on_unload.assert_called_once()
         self.assertEqual(
             ["brewcreator_t1_sg"], [e.unique_id for e in add_entities.call_args.args[0]]

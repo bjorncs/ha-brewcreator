@@ -1,26 +1,25 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock
 
-from custom_components.brewcreator.api import batch_owner
+from custom_components.brewcreator.api import BATCH_INFO_EQUIPMENT, resolve_links
 from custom_components.brewcreator.binary_sensor import BatchStartedEntity
 from custom_components.brewcreator.coordinator import BrewCreatorData
-from custom_components.brewcreator.entity import register_batch_info_entities
+from custom_components.brewcreator.entity import register_entities
 from custom_components.brewcreator.select import FerminatorHydrometerEntity
-from custom_components.brewcreator.sensor import (
-    BatchNameEntity,
-    FermentationTypeEntity,
-    FerminatorProbeTemperatureEntity,
-    FinalGravityEntity,
-    OriginalGravityEntity,
-)
-from tests.factories import BATCH, coordinator, ferminator, graviator, tilt
+from tests.factories import BATCH, coordinator, ferminator, graviator, sensor, tilt
 
-BATCH_ENTITIES = (
-    BatchNameEntity,
-    OriginalGravityEntity,
-    BatchStartedEntity,
-)
+
+def batch_sensor(key):
+    return lambda c, id: sensor(c, id, key, batch_info=True)
+
+
+BATCH_ENTITIES = {
+    "batch_name": batch_sensor("batch_name"),
+    "original_gravity": batch_sensor("original_gravity"),
+    "batch_started": BatchStartedEntity,
+}
 
 
 def batch_ferminator(connection_state: str = "Connected", **extra):
@@ -29,7 +28,7 @@ def batch_ferminator(connection_state: str = "Connected", **extra):
 
 class BatchOwnerTestCase(unittest.TestCase):
     def owner(self, id, *equipment):
-        return batch_owner(next(e for e in equipment if e.id == id), {e.id: e for e in equipment})
+        return coordinator(*equipment).data.equipment[id].batch_owner
 
     def test_ferminator_owns_its_batch(self):
         f = ferminator()
@@ -52,9 +51,9 @@ class BatchValuesTestCase(unittest.TestCase):
     def entities(self, equipment):
         c = coordinator(equipment)
         return (
-            BatchNameEntity(c, equipment.id),
-            OriginalGravityEntity(c, equipment.id),
-            FinalGravityEntity(c, equipment.id),
+            sensor(c, equipment.id, "batch_name", batch_info=True),
+            sensor(c, equipment.id, "original_gravity", batch_info=True),
+            sensor(c, equipment.id, "final_gravity", batch_info=True),
             BatchStartedEntity(c, equipment.id),
         )
 
@@ -67,7 +66,7 @@ class BatchValuesTestCase(unittest.TestCase):
 
     def test_fermentation_type_is_a_translation_key(self):
         f = batch_ferminator()
-        entity = FermentationTypeEntity(coordinator(f), f.id)
+        entity = sensor(coordinator(f), f.id, "fermentation_type", batch_info=True)
         self.assertEqual(["top", "bottom"], entity.options)
         self.assertEqual("top", entity.native_value)
         self.assertEqual("fermentation_type", entity.translation_key)
@@ -78,6 +77,17 @@ class BatchValuesTestCase(unittest.TestCase):
         self.assertIsNone(og.native_value)
         self.assertIsNone(fg.native_value)
         self.assertFalse(started.is_on)
+
+    def test_unset_values_are_unknown(self):
+        f = batch_ferminator(og=0, fg=0, owner="")
+        _, og, fg, _ = self.entities(f)
+        self.assertIsNone(og.native_value)
+        self.assertIsNone(fg.native_value)
+        self.assertIsNone(f.batch_info.owner)
+
+    def test_brew_date_without_time_zone_is_utc(self):
+        f = batch_ferminator(brewDate="2026-11-08T10:00:00")
+        self.assertEqual(datetime(2026, 11, 8, 10, tzinfo=UTC), f.batch_info.brew_date)
 
     def test_values_are_kept_while_the_ferminator_is_offline(self):
         name, og, _, started = self.entities(batch_ferminator("Disconnected"))
@@ -94,9 +104,9 @@ class BatchValuesTestCase(unittest.TestCase):
 
 class BatchAvailabilityTestCase(unittest.TestCase):
     def assert_available(self, available, c, id):
-        for cls in BATCH_ENTITIES:
-            with self.subTest(cls.__name__):
-                self.assertEqual(available, cls(c, id).available)
+        for name, create in BATCH_ENTITIES.items():
+            with self.subTest(name):
+                self.assertEqual(available, create(c, id).available)
 
     def test_available_while_the_ferminator_is_connected(self):
         self.assert_available(True, coordinator(batch_ferminator()), "f")
@@ -108,10 +118,10 @@ class BatchAvailabilityTestCase(unittest.TestCase):
         self.assert_available(False, coordinator(batch_ferminator(), last_update_success=False), "f")
 
     def test_unavailable_once_the_ferminator_is_gone(self):
-        for cls in BATCH_ENTITIES:
-            with self.subTest(cls.__name__):
+        for name, create in BATCH_ENTITIES.items():
+            with self.subTest(name):
                 c = coordinator(batch_ferminator())
-                entity = cls(c, "f")
+                entity = create(c, "f")
                 c.data = BrewCreatorData(equipment={})
                 self.assertFalse(entity.available)
 
@@ -123,12 +133,14 @@ class BatchAvailabilityTestCase(unittest.TestCase):
         c = coordinator(f, graviator("g", **BATCH))
         self.assert_available(False, c, "g")
         f.json["connectedEquipments"] = []
+        resolve_links(c.data.equipment)
         self.assert_available(True, c, "g")
 
     def test_device_readings_and_hydrometer_link_follow_the_ferminator_connection(self):
-        for cls in (FerminatorProbeTemperatureEntity, FerminatorHydrometerEntity):
-            with self.subTest(cls.__name__):
-                self.assertFalse(cls(coordinator(batch_ferminator("Disconnected")), "f").available)
+        probe = lambda c, id: sensor(c, id, "probe_temp")
+        for create in (probe, FerminatorHydrometerEntity):
+            with self.subTest(create):
+                self.assertFalse(create(coordinator(batch_ferminator("Disconnected")), "f").available)
 
 
 class RegistrationTestCase(unittest.TestCase):
@@ -136,7 +148,9 @@ class RegistrationTestCase(unittest.TestCase):
         c = coordinator()
         entry = SimpleNamespace(runtime_data=c, async_on_unload=MagicMock())
         created = []
-        register_batch_info_entities(entry, MagicMock(), lambda coordinator, id: created.append(id) or [])
+        register_entities(
+            entry, MagicMock(), BATCH_INFO_EQUIPMENT, lambda coordinator, id: created.append(id) or []
+        )
         add_entities = c.async_add_equipment_listener.call_args.args[0]
         add_entities([ferminator(), graviator("g"), tilt("t")])
         self.assertEqual(["f", "g"], created)

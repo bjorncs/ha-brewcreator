@@ -1,22 +1,13 @@
 """Actions of the BrewCreator integration."""
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
-from .api import (
-    BATCH_INFO_EQUIPMENT,
-    BrewCreatorEquipment,
-    BrewCreatorError,
-    FermentationType,
-    Ferminator,
-    Graviator,
-    batch_owner,
-)
+from .api import BATCH_INFO_EQUIPMENT, BrewCreatorEquipment, FermentationType, Ferminator, Graviator
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .device import equipment_ids
@@ -53,7 +44,7 @@ MIN_GRAVITY = 0.98
 MAX_GRAVITY = 1.999
 MAX_INTEGER = 9999
 
-FERMENTATION_TYPES = {t.name.lower(): t for t in FermentationType}
+FERMENTATION_TYPES = {t.key: t for t in FermentationType}
 
 TEXT = vol.All(cv.string, vol.Length(min=1, max=MAX_TEXT_LENGTH))
 GRAVITY = vol.All(vol.Coerce(float), vol.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
@@ -96,8 +87,9 @@ async def _async_set_batch_info(call: ServiceCall) -> None:
     data = call.data
     _validate_gravities(equipment, data.get(ATTR_ORIGINAL_GRAVITY), data.get(ATTR_FINAL_GRAVITY))
     fermentation_type = data.get(ATTR_FERMENTATION_TYPE)
-    try:
-        await equipment.set_batch_info(
+    # Refreshed at once, so the batch sensors show the new values when the action returns
+    await coordinator.async_send(
+        equipment.set_batch_info(
             brew_name=data.get(ATTR_BATCH_NAME),
             owner=data.get(ATTR_OWNER),
             beer_style=data.get(ATTR_BEER_STYLE),
@@ -110,15 +102,10 @@ async def _async_set_batch_info(call: ServiceCall) -> None:
             if fermentation_type is not None
             else None,
             is_logging_data=data.get(ATTR_STARTED),
-        )
-    except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="update_failed",
-            translation_placeholders={"name": equipment.name, "error": str(err)},
-        ) from err
-    # Refresh at once, so the batch sensors show the new values when the action returns
-    await coordinator.async_refresh()
+        ),
+        "update_failed",
+        equipment.name,
+    )
 
 
 def _find_batch_equipment(
@@ -136,7 +123,7 @@ def _find_batch_equipment(
                 equipment = coordinator.data.equipment.get(equipment_id)
                 if not isinstance(equipment, BATCH_INFO_EQUIPMENT):
                     continue
-                owner = batch_owner(equipment, coordinator.data.equipment)
+                owner = equipment.batch_owner
                 if owner is not equipment:
                     raise ServiceValidationError(
                         translation_domain=DOMAIN,
@@ -156,14 +143,14 @@ def _validate_gravities(
 ) -> None:
     """Require the final gravity to be below the original gravity, like BrewCreator's batch info form.
 
-    A gravity that isn't given is taken from the current batch info. An original gravity of 0 means it isn't set.
+    A gravity that isn't given is taken from the current batch info.
     """
     batch_info = equipment.batch_info
     if og is None and batch_info is not None:
         og = batch_info.og
     if fg is None and batch_info is not None:
         fg = batch_info.fg
-    if og and fg is not None and fg >= og:
+    if og is not None and fg is not None and fg >= og:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="final_gravity_not_below_original",

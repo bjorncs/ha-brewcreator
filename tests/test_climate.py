@@ -6,15 +6,12 @@ from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.brewcreator.api import BrewCreatorError
 from custom_components.brewcreator.climate import FerminatorConnectClimate
-from custom_components.brewcreator.coordinator import BrewCreatorData
-from tests.factories import ferminator
+from tests.factories import coordinator, ferminator
 
 
 def climate(**extra) -> FerminatorConnectClimate:
-    coordinator = MagicMock()
     f = ferminator(**extra)
-    coordinator.data = BrewCreatorData(equipment={f.id: f})
-    return FerminatorConnectClimate(coordinator, f.id)
+    return FerminatorConnectClimate(coordinator(f), f.id)
 
 
 class ClimateNamingTestCase(unittest.TestCase):
@@ -50,7 +47,6 @@ class ClimateControlTestCase(unittest.IsolatedAsyncioTestCase):
     def climate(self, update: AsyncMock) -> FerminatorConnectClimate:
         entity = climate()
         entity._ferminator()._api = MagicMock(_update_equipment_state=update)
-        entity.coordinator.async_refresh = AsyncMock()
         return entity
 
     async def test_update_is_sent_then_refreshed(self):

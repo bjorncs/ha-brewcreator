@@ -1,14 +1,9 @@
 import unittest
 
-from custom_components.brewcreator.api import Ferminator, Graviator, linked_ferminator
+from custom_components.brewcreator.api import Ferminator, Graviator
 from custom_components.brewcreator.coordinator import BrewCreatorData
-from custom_components.brewcreator.sensor import (
-    FerminatorLastActivityEntity,
-    HydrometerLastBrewLogEntryEntity,
-    HydrometerSpecificGravityEntity,
-)
 from tests import factories
-from tests.factories import coordinator, hydrometer
+from tests.factories import coordinator, hydrometer, sensor
 
 
 def ferminator(
@@ -20,9 +15,7 @@ def ferminator(
 
 class HydrometerAvailabilityTestCase(unittest.TestCase):
     def is_available(self, *equipment, last_update_success: bool = True) -> bool:
-        return HydrometerSpecificGravityEntity(
-            coordinator(*equipment, last_update_success=last_update_success), "t"
-        ).available
+        return sensor(coordinator(*equipment, last_update_success=last_update_success), "t", "sg").available
 
     def test_tilt_linked_to_connected_ferminator_is_available(self):
         self.assertTrue(self.is_available(hydrometer(), ferminator()))
@@ -72,7 +65,7 @@ class HydrometerAvailabilityTestCase(unittest.TestCase):
         self.assertFalse(self.is_available(hydrometer(Graviator, "t", sg=0)))
 
     def test_unavailable_when_equipment_is_gone(self):
-        entity = HydrometerSpecificGravityEntity(coordinator(hydrometer(), ferminator()), "t")
+        entity = sensor(coordinator(hydrometer(), ferminator()), "t", "sg")
         entity.coordinator.data = BrewCreatorData(equipment={})
         self.assertFalse(entity.available)
 
@@ -87,42 +80,44 @@ class HydrometerLinkTestCase(unittest.TestCase):
         f = ferminator()
         other = ferminator(id="other", connected=[])
         t = hydrometer()
-        self.assertIs(f, linked_ferminator(t, {"other": other, "f": f, "t": t}))
-        self.assertIsNone(linked_ferminator(t, {"other": other, "t": t}))
+        coordinator(other, f, t)
+        self.assertIs(f, t.linked_ferminator)
+        coordinator(other, t)
+        self.assertIsNone(t.linked_ferminator)
 
     def test_ferminator_uses_linked_hydrometer_temperature(self):
         f = ferminator(connected=[])
-        f._update_connected_equipment([f, hydrometer(temperature=25)])
+        coordinator(f, hydrometer(temperature=25))
         self.assertEqual(18.0, f.actual_temperature)
         f = ferminator()
-        f._update_connected_equipment([f, hydrometer(temperature=25)])
+        coordinator(f, hydrometer(temperature=25))
         self.assertEqual(25, f.actual_temperature)
 
     def test_ferminator_uses_builtin_probe_when_sg_is_out_of_range(self):
         f = ferminator()
-        f._update_connected_equipment([f, hydrometer(sg=1.31, temperature=25)])
+        coordinator(f, hydrometer(sg=1.31, temperature=25))
         self.assertEqual(18.0, f.actual_temperature)
 
     def test_ferminator_uses_builtin_probe_when_temperature_is_out_of_range(self):
         f = ferminator()
-        f._update_connected_equipment([f, hydrometer(temperature=150)])
+        coordinator(f, hydrometer(temperature=150))
         self.assertEqual(18.0, f.actual_temperature)
 
 
 class LastActivitySensorTestCase(unittest.TestCase):
     def test_hydrometer_sensor_is_named_last_brew_log_entry_and_keeps_unique_id(self):
-        entity = HydrometerLastBrewLogEntryEntity(coordinator(hydrometer(), ferminator()), "t")
+        entity = sensor(coordinator(hydrometer(), ferminator()), "t", "last_activity")
         self.assertEqual("last_brew_log_entry", entity.translation_key)
         self.assertEqual("brewcreator_t_last_activity", entity.unique_id)
 
     def test_hydrometer_sensor_without_brew_log_is_unavailable(self):
-        entity = HydrometerLastBrewLogEntryEntity(coordinator(hydrometer(), ferminator()), "t")
+        entity = sensor(coordinator(hydrometer(), ferminator()), "t", "last_activity")
         self.assertIsNone(entity.native_value)
         self.assertFalse(entity.available)
 
     def test_ferminator_sensor_without_last_activity_is_unavailable(self):
         f = ferminator()
-        entity = FerminatorLastActivityEntity(coordinator(f), "f")
+        entity = sensor(coordinator(f), "f", "last_activity")
         self.assertIsNone(entity.native_value)
         self.assertFalse(entity.available)
 

@@ -1,8 +1,6 @@
 from collections.abc import Awaitable
 import logging
 
-import aiohttp
-
 from homeassistant.components.climate import (
     FAN_HIGH,
     FAN_LOW,
@@ -14,14 +12,12 @@ from homeassistant.components.climate import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import BrewCreatorDataUpdateCoordinator
-from .api import BrewCreatorError, FerminatorMode
-from .const import DOMAIN
-from .entity import FerminatorEntity, register_ferminator_entities
+from .api import Ferminator, FerminatorMode
+from .coordinator import BrewCreatorDataUpdateCoordinator
+from .entity import FerminatorEntity, register_entities
 
 FAN_SPEEDS = {1: FAN_LOW, 2: FAN_MEDIUM, 3: FAN_HIGH, 4: "max"}
 MODE_TO_HVAC_ACTION = {
@@ -39,9 +35,10 @@ async def async_setup_entry(
     entry: ConfigEntry[BrewCreatorDataUpdateCoordinator],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    register_ferminator_entities(
+    register_entities(
         entry,
         async_add_entities,
+        Ferminator,
         lambda coordinator, id: [FerminatorConnectClimate(coordinator, id)],
     )
 
@@ -91,11 +88,11 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
 
     @property
     def hvac_mode(self) -> HVACMode | None:
-        mode = self._ferminator().mode
-        if mode is None:
+        is_regulating = self._ferminator().is_regulating
+        if is_regulating is None:
             # BrewCreator reports no process (lProcess is null), so the mode is unknown
             return None
-        return HVACMode.OFF if mode == FerminatorMode.READY else HVACMode.HEAT_COOL
+        return HVACMode.HEAT_COOL if is_regulating else HVACMode.OFF
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -112,12 +109,6 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
     def fan_mode(self) -> str | None:
         return FAN_SPEEDS.get(self._ferminator().fan_speed)
 
-    async def async_turn_on(self) -> None:
-        await self.async_set_hvac_mode(HVACMode.HEAT_COOL)
-
-    async def async_turn_off(self) -> None:
-        await self.async_set_hvac_mode(HVACMode.OFF)
-
     async def async_set_temperature(self, **kwargs) -> None:
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None:
@@ -132,17 +123,4 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
         await self._async_update(self._ferminator().set_regulating_temperature(is_regulating))
 
     async def _async_update(self, update: Awaitable[None]) -> None:
-        """Send an update to BrewCreator, then refresh so the new state shows when the action returns."""
-        try:
-            await update
-        except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="control_failed",
-                translation_placeholders={"name": self._ferminator().name, "error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        self.async_write_ha_state()
+        await self.coordinator.async_send(update, "control_failed", self._ferminator().name)

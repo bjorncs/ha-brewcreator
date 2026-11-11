@@ -3,25 +3,15 @@
 from collections import Counter
 from collections.abc import Mapping
 
-import aiohttp
-
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import (
-    BrewCreatorEquipment,
-    BrewCreatorError,
-    Ferminator,
-    Hydrometer,
-    linkable_hydrometers,
-)
-from .const import DOMAIN
+from .api import BrewCreatorEquipment, Ferminator, Hydrometer, linkable_hydrometers
 from .coordinator import BrewCreatorDataUpdateCoordinator
-from .entity import FerminatorEntity, register_ferminator_entities
+from .entity import FerminatorEntity, register_entities
 
 NO_HYDROMETER = "none"
 
@@ -46,9 +36,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
-    register_ferminator_entities(
+    register_entities(
         entry,
         async_add_entities,
+        Ferminator,
         lambda coordinator, id: [FerminatorHydrometerEntity(coordinator, id)],
     )
 
@@ -88,13 +79,4 @@ class FerminatorHydrometerEntity(FerminatorEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         hydrometer = None if option == NO_HYDROMETER else self._hydrometers_by_option()[option]
         ferminator = self._ferminator()
-        try:
-            await ferminator.link_hydrometer(hydrometer)
-        except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="link_failed",
-                translation_placeholders={"name": ferminator.name, "error": str(err)},
-            ) from err
-        # Refresh at once, so the new link shows when the action returns
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_send(ferminator.link_hydrometer(hydrometer), "link_failed", ferminator.name)

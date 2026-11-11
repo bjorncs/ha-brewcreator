@@ -13,7 +13,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
@@ -29,14 +28,12 @@ from homeassistant.util import dt as dt_util
 
 from .api import (
     BATCH_INFO_EQUIPMENT,
+    SUPPORTED_EQUIPMENT,
     BrewCreatorEquipment,
     BrewCreatorError,
     EquipmentTypes,
     Ferminator,
-    FerminatorMode,
     Hydrometer,
-    batch_owner,
-    linked_ferminator,
 )
 from .climate import FAN_SPEEDS
 from .const import DOMAIN
@@ -104,7 +101,7 @@ class _Target:
 def _iter_exposed(
     hass: HomeAssistant,
     assistant: str | None,
-    equipment_type: EquipmentTypes = (Ferminator, Hydrometer),
+    equipment_type: EquipmentTypes = SUPPORTED_EQUIPMENT,
 ) -> Iterator[_Target]:
     """Yield the equipment of the type whose device has an entity exposed to the assistant.
 
@@ -133,13 +130,9 @@ def _exposed_targets(hass: HomeAssistant, assistant: str | None) -> list[_Target
     return sorted(_iter_exposed(hass, assistant), key=lambda t: t.name.casefold())
 
 
-def has_exposed(
-    hass: HomeAssistant,
-    assistant: str | None,
-    equipment_type: EquipmentTypes,
-) -> bool:
-    """Return whether any equipment of the type is exposed to the assistant, stopping at the first."""
-    return next(_iter_exposed(hass, assistant, equipment_type), None) is not None
+def exposed_equipment(hass: HomeAssistant, assistant: str | None) -> Iterator[BrewCreatorEquipment]:
+    """Yield the Ferminators and hydrometers exposed to the assistant, looking each up as it is reached."""
+    return (t.equipment for t in _iter_exposed(hass, assistant))
 
 
 def _of_type(targets: list[_Target], equipment_type: EquipmentTypes) -> list[_Target]:
@@ -220,14 +213,14 @@ class GetFermentationStatusIntentHandler(intent.IntentHandler):
             hydrometer = _reporting_hydrometer(ferminator, exposed_ids)
         else:
             hydrometer = target.equipment
-            ferminator = linked_ferminator(hydrometer, target.coordinator.data.equipment)
+            ferminator = hydrometer.linked_ferminator
             if ferminator is not None and ferminator.id not in exposed_ids:
                 ferminator = None
 
         status: dict[str, Any] = {}
         if ferminator is not None:
             status["ferminator"] = _ferminator_status(ferminator)
-        owner = batch_owner(target.equipment, target.coordinator.data.equipment)
+        owner = target.equipment.batch_owner
         if owner is not None and owner.id in exposed_ids:
             status["batch"] = _batch_status(owner)
         if hydrometer is not None:
@@ -248,19 +241,21 @@ def _reporting_hydrometer(ferminator: Ferminator, exposed_ids: set[str]) -> Hydr
     return linked[0] if linked else None
 
 
+def _without_none(status: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in status.items() if v is not None}
+
+
 def _ferminator_status(ferminator: Ferminator) -> dict[str, Any]:
-    status = {
+    return _without_none({
         "name": ferminator.name,
         "connected": ferminator.is_connected,
         "temperature_c": ferminator.actual_temperature,
         "built_in_probe_temperature_c": ferminator.actual_temperature_builtin_probe,
         "target_temperature_c": ferminator.target_temperature,
         "mode": ferminator.mode.name.lower() if ferminator.mode is not None else None,
-        # Like the climate entity, which is off while the Ferminator is ready
-        "temperature_regulation": None if ferminator.mode is None else ferminator.mode != FerminatorMode.READY,
+        "temperature_regulation": ferminator.is_regulating,
         "fan_speed": FAN_SPEEDS.get(ferminator.fan_speed),
-    }
-    return {k: v for k, v in status.items() if v is not None}
+    })
 
 
 def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
@@ -268,38 +263,32 @@ def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
     if batch is None:
         return {}
     status: dict[str, Any] = {
-        "name": batch.brew_name or None,
-        "beer_style": batch.beer_style or None,
-        "owner": batch.owner or None,
+        "name": batch.brew_name,
+        "beer_style": batch.beer_style,
+        "owner": batch.owner,
         "started": equipment.is_logging_data,
-        # An original gravity of 0 means it isn't set
-        "original_gravity": batch.og or None,
-        "final_gravity": batch.fg or None,
-        "ebc": batch.ebc or None,
-        "ibu": batch.ibu or None,
-        "volume_l": batch.volume or None,
-        "fermentation_type": batch.fermentation_type.name.lower()
-        if batch.fermentation_type is not None
-        else None,
+        "original_gravity": batch.og,
+        "final_gravity": batch.fg,
+        "ebc": batch.ebc,
+        "ibu": batch.ibu,
+        "volume_l": batch.volume,
+        "fermentation_type": batch.fermentation_type.key if batch.fermentation_type is not None else None,
     }
     if (brew_date := batch.brew_date) is not None:
-        if brew_date.tzinfo is None:
-            brew_date = brew_date.replace(tzinfo=dt_util.UTC)
         status["brew_start_date"] = brew_date.isoformat()
         status["days_since_brew_start"] = (dt_util.utcnow() - brew_date).days
-    return {k: v for k, v in status.items() if v is not None}
+    return _without_none(status)
 
 
 def _hydrometer_status(hydrometer: Hydrometer) -> dict[str, Any]:
     last_reading = hydrometer.last_activity_time
-    status = {
+    return _without_none({
         "name": hydrometer.name,
         "specific_gravity": hydrometer.specific_gravity,
         "temperature_c": hydrometer.actual_temperature,
         "abv_percent": hydrometer.abv,
         "last_reading": last_reading.isoformat() if last_reading is not None else None,
-    }
-    return {k: v for k, v in status.items() if v is not None}
+    })
 
 
 def _speech(name: str, status: dict[str, Any]) -> str:
@@ -380,7 +369,7 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
         slots = self.async_validate_slots(intent_obj.slots)
         targets = _of_type(_exposed_targets(intent_obj.hass, intent_obj.assistant), BATCH_INFO_EQUIPMENT)
         # A linked Graviator can be named, so the action can explain that it has its Ferminator's batch info
-        unlinked = [t for t in targets if batch_owner(t.equipment, t.coordinator.data.equipment) is t.equipment]
+        unlinked = [t for t in targets if t.equipment.batch_owner is t.equipment]
         target = _match_target(
             targets, _slot_value(slots, SLOT_NAME), "Ferminator or Graviator", default=unlinked
         )
@@ -449,7 +438,7 @@ class LinkHydrometerIntentHandler(intent.IntentHandler):
         # Linked directly rather than through the select, which may be disabled
         try:
             await ferminator.link_hydrometer(None if option == NO_HYDROMETER else hydrometers[option])
-        except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
+        except BrewCreatorError as err:
             raise intent.IntentHandleError(
                 f"Failed to change the hydrometer linked to {target.name}: {err}"
             ) from err

@@ -10,7 +10,6 @@ from homeassistant.helpers import intent, llm
 from homeassistant.util import dt as dt_util
 
 from custom_components.brewcreator.api import BrewCreatorError, Ferminator
-from custom_components.brewcreator.coordinator import BrewCreatorData
 from custom_components.brewcreator.intent import (
     INTENT_GET_FERMENTATION_STATUS,
     INTENT_LINK_HYDROMETER,
@@ -20,7 +19,7 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
     async_setup_intents,
 )
-from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
+from tests.factories import coordinator as make_coordinator, ferminator, graviator, ha_device, tilt, tool_parameters
 
 BATCH = {
     "brewName": "Christmas Miracle",
@@ -51,9 +50,6 @@ class IntentTestCase(unittest.TestCase):
 
     def setup(self, *equipment, device_names=None, exposed=None):
         """Create a device per equipment; only those in exposed (all by default) have an exposed entity."""
-        for e in equipment:
-            if hasattr(e, "_update_connected_equipment"):
-                e._update_connected_equipment(list(equipment))
         device_names = device_names or {}
         devices = {
             e.id: ha_device(e.id, name=device_names.get(e.id, e.name)) for e in equipment
@@ -73,10 +69,8 @@ class IntentTestCase(unittest.TestCase):
         for e in equipment:
             if isinstance(e, Ferminator):
                 e._api = MagicMock(_update_equipment_state=AsyncMock())
-        self.equipment = {e.id: e for e in equipment}
-        self.coordinator = coordinator = MagicMock()
-        coordinator.async_refresh = AsyncMock()
-        coordinator.data = BrewCreatorData(equipment=self.equipment)
+        self.coordinator = coordinator = make_coordinator(*equipment)
+        self.equipment = coordinator.data.equipment
         self.hass = MagicMock()
         self.hass.config_entries.async_loaded_entries.side_effect = lambda domain: (
             [SimpleNamespace(entry_id="entry", runtime_data=coordinator)]

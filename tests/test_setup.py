@@ -25,14 +25,16 @@ class SetupEntryTestCase(unittest.TestCase):
         )
         return coordinator, hass, entry
 
-    def test_failed_first_refresh_stops_the_websocket(self, coordinator_class):
-        coordinator, hass, entry = self.setup_entry(
+    def test_failed_first_refresh_is_raised(self, coordinator_class):
+        # HA then shuts the coordinator down, which stops the websocket
+        _, hass, entry = self.setup_entry(
             coordinator_class, AsyncMock(side_effect=ConfigEntryNotReady("503"))
         )
         with self.assertRaises(ConfigEntryNotReady):
             asyncio.run(async_setup_entry(hass, entry))
-        coordinator.close.assert_awaited_once()
         hass.config_entries.async_forward_entry_setups.assert_not_awaited()
+        # Given the entry, the coordinator registers its shutdown to run when HA unloads the failed entry
+        self.assertIs(entry, coordinator_class.call_args.args[2])
 
     def test_successful_setup_keeps_the_websocket(self, coordinator_class):
         coordinator, hass, entry = self.setup_entry(coordinator_class, AsyncMock())
