@@ -26,6 +26,31 @@ class UpdateEquipmentStateTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.api(response)._update_equipment_state("f", {"fanSpeed": 2})
 
 
+class ConnectivityTestCase(unittest.TestCase):
+    def test_online_while_active_or_briefly_inactive(self):
+        cases = [
+            (True, "Connected", False, True),
+            # isActive drops for a short while when the Ferminator reconnects to the cloud
+            (False, "Connected", False, True),
+            # connectionState can stay Connected for minutes after the Ferminator has gone
+            (False, "Connected", True, False),
+            # Just reconnected: connectionState lags for minutes
+            (True, "Disconnected", False, True),
+            (True, "Disconnected", True, True),
+            (False, "Disconnected", False, False),
+        ]
+        for is_active, connection_state, inactive_too_long, expected in cases:
+            with self.subTest(
+                is_active=is_active, connection_state=connection_state, inactive_too_long=inactive_too_long
+            ):
+                f = ferminator(connection_state=connection_state, is_active=is_active)
+                f.inactive_too_long = inactive_too_long
+                self.assertEqual(expected, f.is_connected)
+
+    def test_active_ferminator_without_device_twin_is_online(self):
+        self.assertTrue(Ferminator(MagicMock(), {"id": "f", "isActive": True, "deviceTwinState": None}).is_connected)
+
+
 class NullDeviceTwinTestCase(unittest.TestCase):
     def test_ferminator_without_device_twin(self):
         ferminator = Ferminator(MagicMock(), {"id": "f", "deviceTwinState": None})

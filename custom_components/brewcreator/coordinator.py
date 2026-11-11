@@ -1,15 +1,18 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
+import json
 import logging
 from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.debounce import Debouncer
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     BrewCreatorAPI,
@@ -34,6 +37,14 @@ REFRESH_COOLDOWN_SECONDS = 2
 # doesn't push, such as readings from an unlinked Wi-Fi Graviator, are only fetched by this poll. It also fetches
 # while the websocket is down, and retries a failed refresh.
 FALLBACK_POLL_INTERVAL = timedelta(minutes=2)
+
+# A Ferminator's isActive drops while it reconnects to the cloud, about every 48 minutes, for 8 to 34 seconds in two
+# days of logs. It only counts as offline once it has been inactive for longer than this.
+OFFLINE_GRACE = timedelta(seconds=60)
+
+# BrewCreator sends Disconnected as soon as it notices a Ferminator is gone. Refresh again once the grace has passed,
+# so a Ferminator that is switched off is seen as offline without waiting for the fallback poll.
+DISCONNECT_REFRESH_DELAY = OFFLINE_GRACE + timedelta(seconds=10)
 
 # Device registry fields kept in sync with BrewCreator, as they can change after the device is registered
 SYNCED_DEVICE_FIELDS = ("name", "sw_version", "hw_version", "model", "serial_number")
@@ -88,6 +99,9 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             for domain, issue_id in ir.async_get(hass).issues
             if domain == DOMAIN and issue_id.startswith(UNSUPPORTED_ISSUE_PREFIX)
         }
+        self._disconnect_refresh_unsub: CALLBACK_TYPE | None = None
+        # When each inactive Ferminator was first seen inactive, by equipment ID
+        self._inactive_since: dict[str, datetime] = {}
 
     async def _async_setup(self):
         await self._api.start_websocket(self._on_websocket_message)
@@ -97,7 +111,19 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             equipment = await self._api.list_equipment()
         except (BrewCreatorError, aiohttp.ClientError, TimeoutError) as err:
             raise UpdateFailed(f"Failed to list equipment: {err}") from err
+        self._track_inactive_ferminators(equipment)
         return BrewCreatorData(equipment=equipment)
+
+    def _track_inactive_ferminators(self, equipment: dict[str, BrewCreatorEquipment]) -> None:
+        """Mark Ferminators that have been inactive for longer than OFFLINE_GRACE, see Ferminator.is_connected."""
+        now = dt_util.utcnow()
+        ferminators = [e for e in equipment.values() if isinstance(e, Ferminator)]
+        self._inactive_since = {
+            f.id: self._inactive_since.get(f.id, now) for f in ferminators if not f.is_active
+        }
+        for f in ferminators:
+            since = self._inactive_since.get(f.id)
+            f.inactive_too_long = since is not None and now - since >= OFFLINE_GRACE
 
     async def _on_websocket_message(self, message: dict[str, Any] | None) -> None:
         """Handle a websocket (re)connect (message is None) or a telemetry message."""
@@ -105,6 +131,32 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             _LOGGER.debug("WebSocket connected, refreshing equipment")
         # Debounced, so this returns at once and a burst of messages is fetched once
         await self.async_request_refresh()
+        if message is not None and _op_type(message) == "Disconnected":
+            self._schedule_disconnect_refresh()
+
+    @callback
+    def _schedule_disconnect_refresh(self) -> None:
+        """Refresh once the offline grace has passed, replacing a refresh already scheduled."""
+        self._cancel_disconnect_refresh()
+        self._disconnect_refresh_unsub = async_call_later(
+            self.hass,
+            DISCONNECT_REFRESH_DELAY,
+            HassJob(self._async_disconnect_refresh, cancel_on_shutdown=True),
+        )
+
+    async def _async_disconnect_refresh(self, _now: datetime) -> None:
+        self._disconnect_refresh_unsub = None
+        await self.async_request_refresh()
+
+    @callback
+    def _cancel_disconnect_refresh(self) -> None:
+        if self._disconnect_refresh_unsub is not None:
+            self._disconnect_refresh_unsub()
+            self._disconnect_refresh_unsub = None
+
+    async def async_shutdown(self) -> None:
+        self._cancel_disconnect_refresh()
+        await super().async_shutdown()
 
     @callback
     def _async_refresh_finished(self) -> None:
@@ -270,3 +322,12 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
 
     async def close(self) -> None:
         await self._api.close()
+
+
+def _op_type(message: dict[str, Any]) -> str | None:
+    """Return the opType of a devicetwin message, such as Connected, Disconnected or telemetry, if it has one."""
+    try:
+        payload = json.loads(message["arguments"][0])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    return payload.get("opType") if isinstance(payload, dict) else None

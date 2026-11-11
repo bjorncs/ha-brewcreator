@@ -12,9 +12,11 @@ from tests import factories
 from tests.factories import hydrometer
 
 
-def ferminator(connection_state: str = "Connected", connected=("t",), id: str = "f") -> Ferminator:
+def ferminator(
+    connection_state: str = "Connected", connected=("t",), id: str = "f", is_active: bool | None = None
+) -> Ferminator:
     """A Ferminator linked to the hydrometer "t" unless told otherwise."""
-    return factories.ferminator(id, connection_state=connection_state, connected=connected)
+    return factories.ferminator(id, connection_state=connection_state, connected=connected, is_active=is_active)
 
 
 def coordinator(*equipment, last_update_success: bool = True) -> MagicMock:
@@ -35,6 +37,12 @@ class HydrometerAvailabilityTestCase(unittest.TestCase):
 
     def test_tilt_linked_to_disconnected_ferminator_is_unavailable(self):
         self.assertFalse(self.is_available(hydrometer(), ferminator("Disconnected")))
+
+    def test_tilt_stays_available_while_its_ferminator_briefly_reconnects_to_the_cloud(self):
+        self.assertTrue(self.is_available(hydrometer(), ferminator(is_active=False)))
+
+    def test_tilt_linked_to_ferminator_that_just_reconnected_is_available(self):
+        self.assertTrue(self.is_available(hydrometer(), ferminator("Disconnected", is_active=True)))
 
     def test_unlinked_tilt_is_unavailable(self):
         self.assertFalse(self.is_available(hydrometer(), ferminator(connected=[])))

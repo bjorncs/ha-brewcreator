@@ -1,5 +1,7 @@
 import asyncio
+import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +12,8 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from custom_components.brewcreator import async_remove_config_entry_device
 from custom_components.brewcreator.api import BrewCreatorEquipment, BrewCreatorError
 from custom_components.brewcreator.coordinator import (
+    DISCONNECT_REFRESH_DELAY,
+    OFFLINE_GRACE,
     BrewCreatorData,
     BrewCreatorDataUpdateCoordinator,
 )
@@ -27,7 +31,17 @@ def make_coordinator() -> BrewCreatorDataUpdateCoordinator:
     coordinator.last_update_success = True
     coordinator._equipment_listeners = {}
     coordinator._unsupported_issue_ids = set()
+    coordinator._disconnect_refresh_unsub = None
+    coordinator._inactive_since = {}
     return coordinator
+
+
+def devicetwin_message(op_type: str) -> dict:
+    return {
+        "type": 1,
+        "target": "devicetwin",
+        "arguments": [json.dumps({"deviceId": "0723-si7-4yk", "opType": op_type, "IsActive": op_type == "Connected"})],
+    }
 
 
 INTEGRATION = DeviceEntryDisabler.INTEGRATION
@@ -214,6 +228,37 @@ class UpdateDataTestCase(unittest.IsolatedAsyncioTestCase):
             await coordinator._async_update_data()
 
 
+T0 = datetime(2026, 11, 11, 18, 0, tzinfo=timezone.utc)
+
+
+@patch("custom_components.brewcreator.coordinator.dt_util.utcnow")
+class InactiveFerminatorTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.coordinator = make_coordinator()
+        self.coordinator._api = MagicMock()
+
+    async def refresh(self, utcnow, at: timedelta, *, is_active: bool, connection_state: str = "Connected"):
+        utcnow.return_value = T0 + at
+        f = ferminator(is_active=is_active, connection_state=connection_state)
+        self.coordinator._api.list_equipment = AsyncMock(return_value={f.id: f})
+        return (await self.coordinator._async_update_data()).equipment[f.id]
+
+    async def test_offline_once_inactive_for_longer_than_the_grace(self, utcnow):
+        self.assertTrue((await self.refresh(utcnow, timedelta(0), is_active=False)).is_connected)
+        within = OFFLINE_GRACE - timedelta(seconds=1)
+        self.assertTrue((await self.refresh(utcnow, within, is_active=False)).is_connected)
+        self.assertFalse((await self.refresh(utcnow, OFFLINE_GRACE, is_active=False)).is_connected)
+
+    async def test_active_again_resets_the_grace(self, utcnow):
+        await self.refresh(utcnow, timedelta(0), is_active=False)
+        self.assertTrue((await self.refresh(utcnow, timedelta(seconds=30), is_active=True)).is_connected)
+        self.assertTrue((await self.refresh(utcnow, OFFLINE_GRACE, is_active=False)).is_connected)
+        self.assertFalse((await self.refresh(utcnow, 2 * OFFLINE_GRACE, is_active=False)).is_connected)
+
+    async def test_disconnect_refresh_comes_after_the_grace(self, utcnow):
+        self.assertGreater(DISCONNECT_REFRESH_DELAY, OFFLINE_GRACE)
+
+
 class WebsocketMessageTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_messages_and_reconnects_request_a_refresh(self):
         coordinator = make_coordinator()
@@ -221,6 +266,56 @@ class WebsocketMessageTestCase(unittest.IsolatedAsyncioTestCase):
         await coordinator._on_websocket_message(DEVICETWIN_MESSAGE)
         await coordinator._on_websocket_message(None)
         self.assertEqual(2, coordinator.async_request_refresh.await_count)
+
+
+@patch("custom_components.brewcreator.coordinator.async_call_later")
+class DisconnectRefreshTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.coordinator = make_coordinator()
+        self.coordinator.async_request_refresh = AsyncMock()
+
+    async def test_disconnect_schedules_a_delayed_refresh(self, call_later):
+        await self.coordinator._on_websocket_message(devicetwin_message("Disconnected"))
+        self.coordinator.async_request_refresh.assert_awaited_once()
+        call_later.assert_called_once()
+        self.assertEqual(DISCONNECT_REFRESH_DELAY, call_later.call_args.args[1])
+
+        await call_later.call_args.args[2].target(None)
+        self.assertEqual(2, self.coordinator.async_request_refresh.await_count)
+        self.assertIsNone(self.coordinator._disconnect_refresh_unsub)
+
+    async def test_another_disconnect_replaces_the_scheduled_refresh(self, call_later):
+        first, second = MagicMock(), MagicMock()
+        call_later.side_effect = [first, second]
+        await self.coordinator._on_websocket_message(devicetwin_message("Disconnected"))
+        await self.coordinator._on_websocket_message(devicetwin_message("Disconnected"))
+        first.assert_called_once()
+        self.assertIs(second, self.coordinator._disconnect_refresh_unsub)
+
+    async def test_other_messages_schedule_nothing(self, call_later):
+        for message in (
+            devicetwin_message("Connected"),
+            DEVICETWIN_MESSAGE,
+            None,
+            {"type": 1, "target": "devicetwin", "arguments": ["not json"]},
+            {"type": 1, "target": "devicetwin", "arguments": []},
+            {"type": 1, "target": "devicetwin", "arguments": ['["a list"]']},
+        ):
+            with self.subTest(message=message):
+                await self.coordinator._on_websocket_message(message)
+        call_later.assert_not_called()
+
+    async def test_shutdown_cancels_the_scheduled_refresh(self, call_later):
+        unsub = MagicMock()
+        call_later.return_value = unsub
+        await self.coordinator._on_websocket_message(devicetwin_message("Disconnected"))
+        with patch(
+            "homeassistant.helpers.update_coordinator.DataUpdateCoordinator.async_shutdown", AsyncMock()
+        ) as super_shutdown:
+            await self.coordinator.async_shutdown()
+        unsub.assert_called_once()
+        super_shutdown.assert_awaited_once()
+        self.assertIsNone(self.coordinator._disconnect_refresh_unsub)
 
 
 class EntityRegistrationTestCase(unittest.TestCase):

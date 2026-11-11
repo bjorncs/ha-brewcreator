@@ -287,6 +287,8 @@ class Ferminator(BrewCreatorEquipment):
     def __init__(self, api: "BrewCreatorAPI", json: dict[str, any]) -> None:
         super().__init__(api, json)
         self._linked_hydrometers: list[Hydrometer] = []
+        self.inactive_too_long = False
+        """Set by the coordinator once isActive has been false for longer than a cloud reconnect lasts."""
 
     @property
     def actual_temperature(self) -> float | None:
@@ -340,8 +342,24 @@ class Ferminator(BrewCreatorEquipment):
         return self._device_twin.get("reportedHwVersion")
 
     @property
+    def is_active(self) -> bool:
+        """Whether BrewCreator reports the Ferminator as active (isActive), which changes as soon as it notices a
+        connect or disconnect."""
+        return self._json.get("isActive") is True
+
+    @property
     def is_connected(self) -> bool:
-        return self._device_twin.get("connectionState") == "Connected"
+        """Whether the Ferminator is online.
+
+        Online while it is active. isActive also drops for up to about 35 seconds every 48 minutes or so, while the
+        Ferminator reconnects to the cloud without going offline, so an inactive Ferminator only counts as offline
+        once the coordinator has seen it inactive for longer (inactive_too_long), or once the device twin's
+        connectionState says Disconnected too. connectionState alone lags too much to rely on: by minutes when
+        coming back, and when going offline by anything from seconds to several minutes.
+        """
+        if self.is_active:
+            return True
+        return self._device_twin.get("connectionState") == "Connected" and not self.inactive_too_long
 
     @property
     def connected_equipment_ids(self) -> list[str]:

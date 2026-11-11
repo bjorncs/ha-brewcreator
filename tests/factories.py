@@ -35,10 +35,13 @@ def ferminator(
     *,
     name: str = "Ferminator",
     connection_state: str = "Connected",
+    is_active: bool | None = None,
     connected: list[str] = (),
     sw_version: str = "1.0",
     **extra,
 ) -> Ferminator:
+    if is_active is None:
+        is_active = connection_state == "Connected"
     return Ferminator(
         MagicMock(),
         equipment(
@@ -51,6 +54,7 @@ def ferminator(
                 "setTemperature": 18.0,
                 "brewName": None,
                 "lastActivityTime": None,
+                "isActive": is_active,
                 "deviceTwinState": {
                     "connectionState": connection_state,
                     "reportedSwVersion": sw_version,
