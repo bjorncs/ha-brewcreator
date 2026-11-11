@@ -5,9 +5,62 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "batch_started": {
+        "default": "mdi:notebook-outline",
+        "state": {
+          "on": "mdi:notebook-edit"
+        }
+      }
+    },
     "select": {
       "hydrometer": {
         "default": "mdi:link-variant"
+      }
+    },
+    "sensor": {
+      "specific_gravity": {
+        "default": "mdi:gauge"
+      },
+      "abv": {
+        "default": "mdi:percent-circle-outline"
+      },
+      "last_brew_log_entry": {
+        "default": "mdi:notebook-check-outline"
+      },
+      "batch_name": {
+        "default": "mdi:beer"
+      },
+      "beer_style": {
+        "default": "mdi:glass-mug-variant"
+      },
+      "owner": {
+        "default": "mdi:account"
+      },
+      "brew_date": {
+        "default": "mdi:calendar-start"
+      },
+      "original_gravity": {
+        "default": "mdi:gauge-full"
+      },
+      "final_gravity": {
+        "default": "mdi:gauge-low"
+      },
+      "ebc": {
+        "default": "mdi:palette"
+      },
+      "ibu": {
+        "default": "mdi:hops"
+      },
+      "batch_volume": {
+        "default": "mdi:barrel"
+      },
+      "fermentation_type": {
+        "default": "mdi:flask-round-bottom",
+        "state": {
+          "top": "mdi:format-vertical-align-top",
+          "bottom": "mdi:format-vertical-align-bottom"
+        }
       }
     }
   }
