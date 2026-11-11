@@ -66,6 +66,8 @@ EquipmentListener = Callable[[list[BrewCreatorEquipment]], set[str]]
 class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
     """Coordinator for updating data from BrewCreator API."""
 
+    config_entry: ConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -221,7 +223,7 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
     def _add_equipment_to(self, listener: EquipmentListener, equipment: dict[str, BrewCreatorEquipment]) -> None:
         """Pass the listener the supported equipment it has no entities for yet."""
         added = self._equipment_listeners[listener]
-        new = [
+        new: list[BrewCreatorEquipment] = [
             e
             for equipment_id, e in equipment.items()
             if isinstance(e, SUPPORTED_EQUIPMENT) and equipment_id not in added

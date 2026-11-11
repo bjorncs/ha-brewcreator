@@ -59,32 +59,17 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
         self._attr_min_temp = 0
         self._attr_max_temp = 50
 
-    # Home Assistant 2026.11 renamed the temperature members to native_*, and uses those when a class provides
-    # both. The old names keep older versions working.
-
     @property
     def native_temperature_unit(self) -> str:
         return UnitOfTemperature.CELSIUS
-
-    @property
-    def temperature_unit(self) -> str:
-        return self.native_temperature_unit
 
     @property
     def native_current_temperature(self) -> float | None:
         return self._ferminator().actual_temperature
 
     @property
-    def current_temperature(self) -> float | None:
-        return self.native_current_temperature
-
-    @property
     def native_target_temperature(self) -> float | None:
         return self._ferminator().target_temperature
-
-    @property
-    def target_temperature(self) -> float | None:
-        return self.native_target_temperature
 
     @property
     def hvac_mode(self) -> HVACMode | None:
@@ -107,7 +92,8 @@ class FerminatorConnectClimate(FerminatorEntity, ClimateEntity):
 
     @property
     def fan_mode(self) -> str | None:
-        return FAN_SPEEDS.get(self._ferminator().fan_speed)
+        fan_speed = self._ferminator().fan_speed
+        return FAN_SPEEDS.get(fan_speed) if fan_speed is not None else None
 
     async def async_set_temperature(self, **kwargs) -> None:
         temperature = kwargs.get(ATTR_TEMPERATURE)

@@ -1,6 +1,7 @@
 import logging
 from abc import ABC
 from collections.abc import Callable
+from typing import cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
@@ -76,7 +77,8 @@ class BrewCreatorEntity(CoordinatorEntity[BrewCreatorDataUpdateCoordinator], ABC
 
 class FerminatorEntity(BrewCreatorEntity, ABC):
     def _ferminator(self) -> Ferminator:
-        return self._brewcreator_device
+        # Ferminator entities are only created for Ferminators
+        return cast(Ferminator, self._brewcreator_device)
 
 
 class BatchInfoEntity(BrewCreatorEntity, ABC):

@@ -11,9 +11,9 @@ climate entity.
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-import voluptuous as vol
+import probatio
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant
@@ -73,7 +73,7 @@ SLOT_HYDROMETER = "hydrometer"
 _NO_HYDROMETER_WORDS = {NO_HYDROMETER, "nothing", "no hydrometer", "unlink", "disconnect"}
 
 # Like services.TEXT, but with str instead of cv.string, which doesn't convert to an OpenAPI schema for the LLM tools
-_TEXT = vol.All(str, vol.Length(min=1, max=MAX_TEXT_LENGTH))
+_TEXT = probatio.All(str, probatio.Length(min=1, max=MAX_TEXT_LENGTH))
 
 
 async def async_setup_intents(hass: HomeAssistant) -> None:
@@ -191,7 +191,7 @@ class GetFermentationStatusIntentHandler(intent.IntentHandler):
     @property
     def slot_schema(self) -> dict:
         return {
-            vol.Optional(
+            probatio.Optional(
                 SLOT_NAME,
                 description="Name of the Ferminator or hydrometer. Can be left out when there is only one Ferminator.",
             ): _TEXT,
@@ -209,11 +209,14 @@ class GetFermentationStatusIntentHandler(intent.IntentHandler):
         )
         # Linked equipment is only included when it is exposed too
         exposed_ids = {t.equipment.id for t in targets}
+        ferminator: Ferminator | None
+        hydrometer: Hydrometer | None
         if isinstance(target.equipment, Ferminator):
             ferminator = target.equipment
             hydrometer = _reporting_hydrometer(ferminator, exposed_ids)
         else:
-            hydrometer = target.equipment
+            # The targets are Ferminators and hydrometers
+            hydrometer = cast(Hydrometer, target.equipment)
             ferminator = hydrometer.linked_ferminator
             if ferminator is not None and ferminator.id not in exposed_ids:
                 ferminator = None
@@ -256,7 +259,7 @@ def _ferminator_status(ferminator: Ferminator) -> dict[str, Any]:
             "target_temperature_c": ferminator.target_temperature,
             "mode": ferminator.mode.name.lower() if ferminator.mode is not None else None,
             "temperature_regulation": ferminator.is_regulating,
-            "fan_speed": FAN_SPEEDS.get(ferminator.fan_speed),
+            "fan_speed": FAN_SPEEDS.get(ferminator.fan_speed) if ferminator.fan_speed is not None else None,
         }
     )
 
@@ -337,31 +340,31 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
     @property
     def slot_schema(self) -> dict:
         return {
-            vol.Optional(
+            probatio.Optional(
                 SLOT_NAME,
                 description="Name of the Ferminator or Graviator. Can be left out when there is only one Ferminator "
                 "or unlinked Graviator.",
             ): _TEXT,
-            vol.Optional(ATTR_BATCH_NAME, description="Name of the batch."): _TEXT,
-            vol.Optional(ATTR_OWNER, description="The brewer of the batch."): _TEXT,
-            vol.Optional(ATTR_BEER_STYLE, description="Style of the beer, such as IPA or Scottish Export."): _TEXT,
-            vol.Optional(
+            probatio.Optional(ATTR_BATCH_NAME, description="Name of the batch."): _TEXT,
+            probatio.Optional(ATTR_OWNER, description="The brewer of the batch."): _TEXT,
+            probatio.Optional(ATTR_BEER_STYLE, description="Style of the beer, such as IPA or Scottish Export."): _TEXT,
+            probatio.Optional(
                 ATTR_ORIGINAL_GRAVITY,
                 description="Specific gravity before fermentation, such as 1.058. Must be above the final gravity.",
             ): GRAVITY,
-            vol.Optional(
+            probatio.Optional(
                 ATTR_FINAL_GRAVITY,
                 description="Expected or measured specific gravity after fermentation, such as 1.012. "
                 "Must be below the original gravity.",
             ): GRAVITY,
-            vol.Optional(ATTR_EBC, description="Colour of the beer in EBC."): POSITIVE_INTEGER,
-            vol.Optional(ATTR_IBU, description="Bitterness in IBU."): POSITIVE_INTEGER,
-            vol.Optional(ATTR_VOLUME, description="Batch volume in litres."): POSITIVE_INTEGER,
-            vol.Optional(
+            probatio.Optional(ATTR_EBC, description="Colour of the beer in EBC."): POSITIVE_INTEGER,
+            probatio.Optional(ATTR_IBU, description="Bitterness in IBU."): POSITIVE_INTEGER,
+            probatio.Optional(ATTR_VOLUME, description="Batch volume in litres."): POSITIVE_INTEGER,
+            probatio.Optional(
                 ATTR_FERMENTATION_TYPE,
                 description="top for top fermented (ale), bottom for bottom fermented (lager).",
-            ): vol.In(list(FERMENTATION_TYPES)),
-            vol.Optional(
+            ): probatio.In(list(FERMENTATION_TYPES)),
+            probatio.Optional(
                 ATTR_STARTED,
                 description="true to start logging the brew's readings in BrewCreator, false to stop logging. "
                 "Doesn't turn temperature regulation on or off.",
@@ -385,7 +388,7 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
                 blocking=True,
                 context=intent_obj.context,
             )
-        except (HomeAssistantError, vol.Invalid) as err:
+        except (HomeAssistantError, probatio.Invalid) as err:
             raise intent.IntentHandleError(str(err)) from err
 
         response = intent_obj.create_response()
@@ -408,11 +411,11 @@ class LinkHydrometerIntentHandler(intent.IntentHandler):
     @property
     def slot_schema(self) -> dict:
         return {
-            vol.Optional(
+            probatio.Optional(
                 SLOT_NAME,
                 description="Name of the Ferminator. Can be left out when there is only one.",
             ): _TEXT,
-            vol.Required(
+            probatio.Required(
                 SLOT_HYDROMETER,
                 description=f"Name of the hydrometer to link, or {NO_HYDROMETER!r} to unlink the current one.",
             ): _TEXT,
@@ -424,7 +427,7 @@ class LinkHydrometerIntentHandler(intent.IntentHandler):
         targets = _exposed_targets(hass, intent_obj.assistant)
         ferminators = _of_type(targets, Ferminator)
         target = _match_target(ferminators, _slot_value(slots, SLOT_NAME), "Ferminator", default=ferminators)
-        ferminator: Ferminator = target.equipment
+        ferminator = cast(Ferminator, target.equipment)
         # Only exposed hydrometers can be linked. The options are the select's, which may include an ID suffix.
         exposed_ids = {t.equipment.id for t in targets}
         hydrometers = {

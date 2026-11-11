@@ -36,14 +36,14 @@ class BrewCreatorSensorDescription(SensorEntityDescription):
     """Available whenever it has a value, whether or not the equipment is connected."""
 
 
-_TEMPERATURE = {
+_TEMPERATURE: dict[str, Any] = {
     "device_class": SensorDeviceClass.TEMPERATURE,
     "native_unit_of_measurement": UnitOfTemperature.CELSIUS,
     "suggested_display_precision": 1,
     "state_class": SensorStateClass.MEASUREMENT,
 }
 
-_LAST_ACTIVITY = {
+_LAST_ACTIVITY: dict[str, Any] = {
     "device_class": SensorDeviceClass.TIMESTAMP,
     "entity_category": EntityCategory.DIAGNOSTIC,
     "entity_registry_enabled_default": False,

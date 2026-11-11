@@ -1,6 +1,7 @@
 """The BrewCreator integration."""
 
 import logging
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -136,7 +137,7 @@ def _migrate_device_identifiers(hass: HomeAssistant, entry: ConfigEntry) -> None
             )
             ids -= shared
         claimed |= ids
-        changes = {}
+        changes: dict[str, Any] = {}
         if ids:
             changes["new_identifiers"] = {(DOMAIN, e) for e in ids}
         else:

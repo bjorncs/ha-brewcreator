@@ -1,6 +1,6 @@
 """Actions of the BrewCreator integration."""
 
-import voluptuous as vol
+import probatio
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
@@ -46,24 +46,24 @@ MAX_INTEGER = 9999
 
 FERMENTATION_TYPES = {t.key: t for t in FermentationType}
 
-TEXT = vol.All(cv.string, vol.Length(min=1, max=MAX_TEXT_LENGTH))
-GRAVITY = vol.All(vol.Coerce(float), vol.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
-POSITIVE_INTEGER = vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_INTEGER))
+TEXT = probatio.All(cv.string, probatio.Length(min=1, max=MAX_TEXT_LENGTH))
+GRAVITY = probatio.All(probatio.Coerce(float), probatio.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
+POSITIVE_INTEGER = probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=MAX_INTEGER))
 
-SET_BATCH_INFO_SCHEMA = vol.All(
-    vol.Schema(
+SET_BATCH_INFO_SCHEMA = probatio.All(
+    probatio.Schema(
         {
-            vol.Required(ATTR_DEVICE_ID): cv.string,
-            vol.Optional(ATTR_BATCH_NAME): TEXT,
-            vol.Optional(ATTR_OWNER): TEXT,
-            vol.Optional(ATTR_BEER_STYLE): TEXT,
-            vol.Optional(ATTR_ORIGINAL_GRAVITY): GRAVITY,
-            vol.Optional(ATTR_FINAL_GRAVITY): GRAVITY,
-            vol.Optional(ATTR_EBC): POSITIVE_INTEGER,
-            vol.Optional(ATTR_IBU): POSITIVE_INTEGER,
-            vol.Optional(ATTR_VOLUME): POSITIVE_INTEGER,
-            vol.Optional(ATTR_FERMENTATION_TYPE): vol.In(list(FERMENTATION_TYPES)),
-            vol.Optional(ATTR_STARTED): cv.boolean,
+            probatio.Required(ATTR_DEVICE_ID): cv.string,
+            probatio.Optional(ATTR_BATCH_NAME): TEXT,
+            probatio.Optional(ATTR_OWNER): TEXT,
+            probatio.Optional(ATTR_BEER_STYLE): TEXT,
+            probatio.Optional(ATTR_ORIGINAL_GRAVITY): GRAVITY,
+            probatio.Optional(ATTR_FINAL_GRAVITY): GRAVITY,
+            probatio.Optional(ATTR_EBC): POSITIVE_INTEGER,
+            probatio.Optional(ATTR_IBU): POSITIVE_INTEGER,
+            probatio.Optional(ATTR_VOLUME): POSITIVE_INTEGER,
+            probatio.Optional(ATTR_FERMENTATION_TYPE): probatio.In(list(FERMENTATION_TYPES)),
+            probatio.Optional(ATTR_STARTED): cv.boolean,
         }
     ),
     cv.has_at_least_one_key(*BATCH_FIELDS),

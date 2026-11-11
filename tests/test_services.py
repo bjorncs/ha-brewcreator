@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import voluptuous as vol
+import probatio
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.brewcreator.api import BrewCreatorError
@@ -158,7 +158,7 @@ class SetBatchInfoTestCase(unittest.TestCase):
 
 class SetBatchInfoSchemaTestCase(unittest.TestCase):
     def test_at_least_one_batch_field_is_required(self):
-        with self.assertRaises(vol.Invalid):
+        with self.assertRaises(probatio.Invalid):
             SET_BATCH_INFO_SCHEMA({"device_id": "d"})
 
     def test_out_of_range_values_are_refused(self):
@@ -172,7 +172,7 @@ class SetBatchInfoSchemaTestCase(unittest.TestCase):
             ("owner", "x" * 129),
             ("fermentation_type", "Top"),
         ):
-            with self.subTest(field=field), self.assertRaises(vol.Invalid):
+            with self.subTest(field=field), self.assertRaises(probatio.Invalid):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", field: value})
 
 

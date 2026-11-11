@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -10,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class BrewCreatorTokenStore:
     def __init__(self, hass: HomeAssistant):
-        self._store = Store(hass, 1, "brewcreator_tokens")
+        self._store: Store[dict[str, Any]] = Store(hass, 1, "brewcreator_tokens")
         self._lock = asyncio.Lock()
 
     async def load_tokens(self) -> tuple[str | None, str | None, datetime | None]:

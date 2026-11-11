@@ -86,7 +86,7 @@ class BatchInfo:
     BrewCreator reports a field that isn't set as 0 or an empty string, which is returned as None.
     """
 
-    def __init__(self, json: dict[str, any]) -> None:
+    def __init__(self, json: dict[str, Any]) -> None:
         self._json = json
 
     def _value(self, key: str) -> Any:
@@ -155,7 +155,7 @@ class BrewCreatorAuthError(BrewCreatorError):
 
 
 class BrewCreatorEquipment(ABC):
-    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, Any]) -> None:
         self._api = api
         self._json = json
 
@@ -189,7 +189,7 @@ class BrewCreatorEquipment(ABC):
         return datetime.fromisoformat(value)
 
     @property
-    def is_logging_data(self) -> bool:
+    def is_logging_data(self) -> bool | None:
         return self._json.get("isLoggingData")
 
     @property
@@ -199,7 +199,7 @@ class BrewCreatorEquipment(ABC):
         return None
 
     @property
-    def json(self) -> dict[str, any]:
+    def json(self) -> dict[str, Any]:
         return self._json
 
     @property
@@ -244,12 +244,12 @@ class BrewCreatorEquipment(ABC):
         }
         await self._update_equipment({k: v for k, v in fields.items() if v is not None})
 
-    async def _update_equipment(self, json_payload: dict[str, any]) -> None:
+    async def _update_equipment(self, json_payload: dict[str, Any]) -> None:
         await self._api._update_equipment_state(self.id, json_payload)
 
 
 class Hydrometer(BrewCreatorEquipment, ABC):
-    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, Any]) -> None:
         super().__init__(api, json)
         self._linked_ferminator: Ferminator | None = None
 
@@ -324,7 +324,7 @@ class Graviator(Hydrometer):
 
 
 class Ferminator(BrewCreatorEquipment):
-    def __init__(self, api: BrewCreatorAPI, json: dict[str, any]) -> None:
+    def __init__(self, api: BrewCreatorAPI, json: dict[str, Any]) -> None:
         super().__init__(api, json)
         self._linked_hydrometers: list[Hydrometer] = []
         self.inactive_too_long = False
@@ -537,7 +537,7 @@ class BrewCreatorAPI:
         username: str,
         password: str,
         token_storage: TokenStorage,
-        session: aiohttp.ClientSession = None,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
         self.__username = username
         self.__password = password
@@ -562,7 +562,7 @@ class BrewCreatorAPI:
 
     async def list_equipment(self) -> dict[str, BrewCreatorEquipment]:
         """List all equipment on the account, fetching every page."""
-        equipment_json = []
+        equipment_json: list[dict[str, Any]] = []
         for page in range(1, EQUIPMENT_MAX_PAGES + 1):
             data = await self.equipment_json(page)
             equipment_json.extend(e for e in data["data"] if e is not None)
@@ -602,13 +602,13 @@ class BrewCreatorAPI:
                 await self.__websocket_task
             self.__websocket_task = None
 
-    async def _update_equipment_state(self, equipment_id: str, json_payload: dict[str, any]) -> None:
+    async def _update_equipment_state(self, equipment_id: str, json_payload: dict[str, Any]) -> None:
         """Update equipment, raising BrewCreatorError if BrewCreator rejects the update."""
         json = await self.__do_authenticated_request("PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload)
         if not (json or {}).get("succeeded"):
             raise BrewCreatorError(f"BrewCreator rejected the update of {equipment_id}")
 
-    def __get_equipment_from_json(self, equipment: dict[str, any]) -> BrewCreatorEquipment:
+    def __get_equipment_from_json(self, equipment: dict[str, Any]) -> BrewCreatorEquipment:
         value = equipment["iotHubBrewEquipmentGroupId"]
         if (equipment_class := _EQUIPMENT_CLASSES.get(value)) is not None:
             return equipment_class(self, equipment)
@@ -649,7 +649,11 @@ class BrewCreatorAPI:
 
         Returns how many seconds the connection lasted after a successful handshake, or None if the handshake failed.
         """
+        message_callback = self.__message_callback
+        assert message_callback is not None, "start_websocket sets the callback before connecting"
         response = await self.__do_authenticated_request("POST", "/telemetry/negotiate?negotiateVersion=1")
+        if response is None:
+            raise BrewCreatorError("WebSocket negotiation returned no connection token")
         connection_token = response["connectionToken"]
         wss_host = "wss://api.brewcreator.com"
         url = f"{wss_host}/telemetry?id={connection_token}&access_token={self.__access_token}"
@@ -658,7 +662,7 @@ class BrewCreatorAPI:
             autoclose=True,
             autoping=True,
             heartbeat=10,
-            timeout=30,
+            timeout=aiohttp.ClientWSTimeout(ws_close=30),
             receive_timeout=None,
         ) as ws:
             await _send_signalr(ws, '{"protocol":"json","version":1}')
@@ -675,13 +679,13 @@ class BrewCreatorAPI:
                 _LOGGER.info("Successfully connected to %s", wss_host)
                 connected_at = monotonic()
                 # Refetch state, as anything may have changed while disconnected
-                await self.__message_callback(None)
+                await message_callback(None)
             # Send text message every 10th second to keep connection alive in a separate task
             ping_task = asyncio.create_task(self.__websocket_signalr_ping(ws))
             try:
                 async for msg in ws:  # type: aiohttp.WSMessage
                     if msg.type == aiohttp.WSMsgType.TEXT:
-                        await self.__handle_websocket_text(msg.data)
+                        await self.__handle_websocket_text(msg.data, message_callback)
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         _LOGGER.error(
                             "WebSocket failed with error: %s",
@@ -700,7 +704,7 @@ class BrewCreatorAPI:
                 return None
             return monotonic() - connected_at
 
-    async def __handle_websocket_text(self, data: str) -> None:
+    async def __handle_websocket_text(self, data: str, message_callback: WebsocketMessageCallback) -> None:
         for message in parse_signalr_frames(data):
             message_type = message.get("type")
             if message_type == 6:
@@ -710,7 +714,7 @@ class BrewCreatorAPI:
                     "Received a message that will trigger a state update: %s",
                     message,
                 )
-                await self.__message_callback(message)
+                await message_callback(message)
             elif message_type == 7:
                 _LOGGER.debug("Received WebSocket SignalR close: %s", message)
             else:
@@ -733,8 +737,8 @@ class BrewCreatorAPI:
                 return
 
     async def __do_authenticated_request(
-        self, method: str, path: str, json: dict[str, any] | None = None
-    ) -> dict[str, any] | None:
+        self, method: str, path: str, json: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         max_attempts = 5
         sleep_seconds_between_attempts = 1
         for attempt in range(max_attempts):
@@ -793,7 +797,7 @@ class BrewCreatorAPI:
             )
             return
         if self.__refresh_token is not None:
-            await self.__set_tokens(await self.__exchange_refresh_token_for_tokens())
+            await self.__set_tokens(await self.__exchange_refresh_token_for_tokens(self.__refresh_token))
             return
         await self.__set_tokens(await self.__exchange_username_and_password_for_tokens())
 
@@ -827,10 +831,10 @@ class BrewCreatorAPI:
                 datetime.now() + timedelta(seconds=json["expires_in"]),
             )
 
-    async def __exchange_refresh_token_for_tokens(self) -> tuple[str, str, datetime]:
+    async def __exchange_refresh_token_for_tokens(self, refresh_token: str) -> tuple[str, str, datetime]:
         _LOGGER.debug("Exchanging refresh token for new tokens")
         return await self.__request_tokens(
-            {"grant_type": "refresh_token", "refresh_token": self.__refresh_token},
+            {"grant_type": "refresh_token", "refresh_token": refresh_token},
             "refresh tokens",
         )
 
@@ -848,15 +852,20 @@ class BrewCreatorAPI:
                 "redirect_uri": "https://brewcreator.com",
             },
             "exchange code for tokens",
-            timeout=20,
+            timeout=aiohttp.ClientTimeout(total=20),
         )
 
     async def __get_csrf_token(self) -> str:
-        async with self.__session.get("https://identity.brewcreator.com/Account/Login", timeout=60) as response:
+        async with self.__session.get(
+            "https://identity.brewcreator.com/Account/Login", timeout=aiohttp.ClientTimeout(total=60)
+        ) as response:
             if response.status != 200:
                 raise BrewCreatorError(f"Failed to get CSRF token: {response.status}")
             pattern = '<input name="__RequestVerificationToken" type="hidden" value="([^"]*)"'
-            csrf_token = re.search(pattern, await response.text()).group(1)
+            match = re.search(pattern, await response.text())
+            if match is None:
+                raise BrewCreatorError("Failed to find the CSRF token on the login page")
+            csrf_token = match.group(1)
             _LOGGER.debug("Found CSRF token of length %d", len(csrf_token))
             return csrf_token
 
