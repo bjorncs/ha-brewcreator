@@ -1,4 +1,6 @@
 # BrewCreator integration for Home Assistant
+[![CI](https://github.com/bjorncs/ha-brewcreator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bjorncs/ha-brewcreator/actions/workflows/ci.yml)
+
 Monitor and control your devices in [BrewCreator](https://brewcreator.com) such as
 [Fercubator Connect](https://www.brewolution.com/fermentation/fercubator-and-accessories/fercubator-connect-wifi-thermostat-controlled-fermentation)
 (previously named Ferminator Connect) through Home Assistant.
@@ -140,12 +142,24 @@ Please attach [diagnostics output](https://www.home-assistant.io/docs/configurat
 [enable debug logging](https://www.home-assistant.io/docs/configuration/troubleshooting/#enabling-debug-logging) prior to dumping the log).
 
 ### Development
-The tests run against the Home Assistant version in `requirements.txt`:
+The tests run against the Home Assistant version in `requirements.txt`. `requirements_dev.txt` adds the lint and type
+check tools:
 
 ```bash
-uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements.txt
-.venv/bin/python -m unittest tests/test_*.py
+uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements_dev.txt
+.venv/bin/python -m unittest discover -s tests
 ```
+
+[pre-commit](https://pre-commit.com) runs ruff (lint and format), codespell, JSON/YAML checks and mypy. Install it as a
+git hook to run it on every commit, or run it on all files:
+
+```bash
+uv run --no-project pre-commit install
+uv run --no-project pre-commit run --all-files
+```
+
+CI runs the same checks and the tests on every pull request and push to `main`, next to the hassfest and HACS
+validation.
 
 `tests/test_api.py` runs against the BrewCreator cloud, and is skipped unless `BREWCREATOR_USERNAME` and
 `BREWCREATOR_PASSWORD` are set.
