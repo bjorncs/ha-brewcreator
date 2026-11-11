@@ -8,12 +8,37 @@ from homeassistant.helpers import intent, llm
 import probatio
 
 from custom_components.brewcreator.api import (
+    BrewCreatorEquipment,
     Ferminator,
     Graviator,
     Hydrometer,
     Tilt,
     UnsupportedEquipment,
 )
+from custom_components.brewcreator.coordinator import BrewCreatorData
+
+BATCH = {
+    "brewName": "Christmas Miracle",
+    "owner": "bjorncs",
+    "brewDate": "2026-11-08T10:00:00+00:00",
+    "ebc": 34,
+    "ibu": 26,
+    "volume": 21,
+    "fermented": "Top",
+    "og": 1.058,
+    "fg": 1.015,
+    "beerStyle": "Scottish Export",
+    "isLoggingData": True,
+}
+"""Batch info fields of equipment JSON, for a started brew."""
+
+
+def coordinator(*equipment: BrewCreatorEquipment, last_update_success: bool = True) -> MagicMock:
+    """A coordinator holding the equipment, as of a refresh that succeeded unless told otherwise."""
+    coordinator = MagicMock()
+    coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
+    coordinator.last_update_success = last_update_success
+    return coordinator
 
 
 def equipment(

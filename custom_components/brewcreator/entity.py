@@ -8,10 +8,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import (
+    BATCH_INFO_EQUIPMENT,
     BrewCreatorEquipment,
+    EquipmentTypes,
     Ferminator,
     Graviator,
     Hydrometer,
+    batch_owner,
     linked_ferminator,
 )
 from .const import DOMAIN
@@ -55,6 +58,7 @@ class BrewCreatorEntity(CoordinatorEntity[BrewCreatorDataUpdateCoordinator], ABC
         # The name comes from the translation key, or from the device class when it has none
         self._attr_translation_key = translation_key
         self._attr_unique_id = entity_unique_id(id, unique_id_suffix)
+        self._attr_device_info = device_info(self._brewcreator_device)
         _LOGGER.debug(
             "Creating entity (id=%s, class=%s, translation_key=%s)",
             self._attr_unique_id,
@@ -80,16 +84,6 @@ class BrewCreatorEntity(CoordinatorEntity[BrewCreatorDataUpdateCoordinator], ABC
 
 
 class HydrometerEntity(BrewCreatorEntity, ABC):
-    def __init__(
-        self,
-        coordinator: BrewCreatorDataUpdateCoordinator,
-        id: str,
-        translation_key: str | None,
-        unique_id_suffix: str,
-    ):
-        super().__init__(coordinator, id, translation_key, unique_id_suffix)
-        self._attr_device_info = device_info(self._hydrometer())
-
     @property
     def available(self) -> bool:
         """Return whether the hydrometer is available, based on its link to a Ferminator.
@@ -117,22 +111,28 @@ class HydrometerEntity(BrewCreatorEntity, ABC):
 
 
 class FerminatorEntity(BrewCreatorEntity, ABC):
-    def __init__(
-        self,
-        coordinator: BrewCreatorDataUpdateCoordinator,
-        id: str,
-        translation_key: str | None,
-        unique_id_suffix: str,
-    ):
-        super().__init__(coordinator, id, translation_key, unique_id_suffix)
-        self._attr_device_info = device_info(self._ferminator())
-
     @property
     def available(self) -> bool:
         return self._equipment_available and self._ferminator().is_connected
 
     def _ferminator(self) -> Ferminator:
         return self._brewcreator_device
+
+
+class BatchInfoEntity(BrewCreatorEntity, ABC):
+    """An entity showing the batch info of a Ferminator or an unlinked Graviator.
+
+    Batch info is metadata kept in BrewCreator and set through its API (set_batch_info), not something the equipment
+    reports, so it stays available while the equipment is offline. A Graviator linked to a Ferminator has a copy of the
+    Ferminator's batch info, which the Ferminator's entities show, so its own are unavailable while it is linked.
+    """
+
+    @property
+    def available(self) -> bool:
+        if not self._equipment_available:
+            return False
+        equipment = self._brewcreator_device
+        return batch_owner(equipment, self.coordinator.data.equipment) is equipment
 
 
 CreateEntities = Callable[[BrewCreatorDataUpdateCoordinator, str], list[BrewCreatorEntity]]
@@ -157,10 +157,22 @@ def register_hydrometer_entities(
     _register_entities(entry, async_add_entities, Hydrometer, create_hydrometer_entities)
 
 
+def register_batch_info_entities(
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+    create_batch_info_entities: CreateEntities,
+):
+    """Add batch info entities for every Ferminator and Graviator, now and when one appears later.
+
+    Tilts get none, as they only report through a Ferminator, whose entities show the batch.
+    """
+    _register_entities(entry, async_add_entities, BATCH_INFO_EQUIPMENT, create_batch_info_entities)
+
+
 def _register_entities(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    equipment_type: type[BrewCreatorEquipment],
+    equipment_type: EquipmentTypes,
     create_entities: CreateEntities,
 ):
     coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data

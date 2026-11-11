@@ -36,6 +36,10 @@ data:
   started: true
 ```
 
+A Graviator that isn't linked to a Ferminator logs over Wi-Fi with a batch of its own, so it gets the same sensors,
+and the action accepts it too. While a Graviator is linked, BrewCreator gives it the Ferminator's batch info: its own
+batch sensors are unavailable then, and the batch is changed on the Ferminator.
+
 The final gravity must be below the original gravity. Version 1.0.0 replaces the batch options dialog and the
 Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
 
@@ -46,7 +50,7 @@ Assist API (*Device control*). MCP clients get them too, through Home Assistant'
 | Tool | What it does |
 |------|--------------|
 | `brewcreator__GetFermentationStatus` | Batch info, temperatures, specific gravity, ABV and days fermenting of a Ferminator or hydrometer |
-| `brewcreator__SetBatchInfo` | Changes the batch info, like the `brewcreator.set_batch_info` action |
+| `brewcreator__SetBatchInfo` | Changes the batch info of a Ferminator or unlinked Graviator, like the `brewcreator.set_batch_info` action |
 | `brewcreator__LinkHydrometer` | Links a hydrometer to a Ferminator, or unlinks it |
 
 The tools are the intents `BrewCreatorGetFermentationStatus`, `BrewCreatorSetBatchInfo` and

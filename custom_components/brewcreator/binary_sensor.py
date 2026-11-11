@@ -1,4 +1,4 @@
-"""Binary sensor entities for Ferminator devices."""
+"""Binary sensor entities for the batch info of Ferminators and Graviators."""
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import BrewCreatorDataUpdateCoordinator
-from .entity import FerminatorEntity, register_ferminator_entities
+from .entity import BatchInfoEntity, register_batch_info_entities
 
 
 async def async_setup_entry(
@@ -17,14 +17,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ):
-    register_ferminator_entities(
+    register_batch_info_entities(
         entry,
         async_add_entities,
-        lambda coordinator, id: [FerminatorBatchStartedEntity(coordinator, id)],
+        lambda coordinator, id: [BatchStartedEntity(coordinator, id)],
     )
 
 
-class FerminatorBatchStartedEntity(FerminatorEntity, BinarySensorEntity):
+class BatchStartedEntity(BatchInfoEntity, BinarySensorEntity):
     """Whether the brew is started, so BrewCreator logs its readings. Changed with the set_batch_info action."""
 
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
@@ -33,4 +33,4 @@ class FerminatorBatchStartedEntity(FerminatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        return self._ferminator().is_logging_data
+        return self._brewcreator_device.is_logging_data

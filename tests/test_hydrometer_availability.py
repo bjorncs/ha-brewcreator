@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import MagicMock
 
 from custom_components.brewcreator.api import Ferminator, Graviator, linked_ferminator
 from custom_components.brewcreator.coordinator import BrewCreatorData
@@ -9,7 +8,7 @@ from custom_components.brewcreator.sensor import (
     HydrometerSpecificGravityEntity,
 )
 from tests import factories
-from tests.factories import hydrometer
+from tests.factories import coordinator, hydrometer
 
 
 def ferminator(
@@ -17,13 +16,6 @@ def ferminator(
 ) -> Ferminator:
     """A Ferminator linked to the hydrometer "t" unless told otherwise."""
     return factories.ferminator(id, connection_state=connection_state, connected=connected, is_active=is_active)
-
-
-def coordinator(*equipment, last_update_success: bool = True) -> MagicMock:
-    coordinator = MagicMock()
-    coordinator.data = BrewCreatorData(equipment={e.id: e for e in equipment})
-    coordinator.last_update_success = last_update_success
-    return coordinator
 
 
 class HydrometerAvailabilityTestCase(unittest.TestCase):

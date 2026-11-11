@@ -5,8 +5,10 @@ set_batch_info:
       selector:
         device:
           filter:
-            integration: brewcreator
-            model: Ferminator
+            - integration: brewcreator
+              model: Ferminator
+            - integration: brewcreator
+              model: Graviator
     batch_name:
       example: "Christmas Miracle"
       selector:

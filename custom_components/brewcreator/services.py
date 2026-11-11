@@ -8,7 +8,15 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
-from .api import BrewCreatorError, FermentationType, Ferminator
+from .api import (
+    BATCH_INFO_EQUIPMENT,
+    BrewCreatorEquipment,
+    BrewCreatorError,
+    FermentationType,
+    Ferminator,
+    Graviator,
+    batch_owner,
+)
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .device import equipment_ids
@@ -83,13 +91,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
 
 async def _async_set_batch_info(call: ServiceCall) -> None:
-    """Change the given fields of a Ferminator's batch info, leaving the others as they are."""
-    coordinator, ferminator = _find_ferminator(call.hass, call.data[ATTR_DEVICE_ID])
+    """Change the given batch info fields of a Ferminator or an unlinked Graviator, leaving the others as they are."""
+    coordinator, equipment = _find_batch_equipment(call.hass, call.data[ATTR_DEVICE_ID])
     data = call.data
-    _validate_gravities(ferminator, data.get(ATTR_ORIGINAL_GRAVITY), data.get(ATTR_FINAL_GRAVITY))
+    _validate_gravities(equipment, data.get(ATTR_ORIGINAL_GRAVITY), data.get(ATTR_FINAL_GRAVITY))
     fermentation_type = data.get(ATTR_FERMENTATION_TYPE)
     try:
-        await ferminator.set_batch_info(
+        await equipment.set_batch_info(
             brew_name=data.get(ATTR_BATCH_NAME),
             owner=data.get(ATTR_OWNER),
             beer_style=data.get(ATTR_BEER_STYLE),
@@ -107,39 +115,50 @@ async def _async_set_batch_info(call: ServiceCall) -> None:
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="update_failed",
-            translation_placeholders={"name": ferminator.name, "error": str(err)},
+            translation_placeholders={"name": equipment.name, "error": str(err)},
         ) from err
     # Refresh at once, so the batch sensors show the new values when the action returns
     await coordinator.async_refresh()
 
 
-def _find_ferminator(
+def _find_batch_equipment(
     hass: HomeAssistant, device_id: str
-) -> tuple[BrewCreatorDataUpdateCoordinator, Ferminator]:
-    """Return the Ferminator of a device and the coordinator of its loaded config entry."""
+) -> tuple[BrewCreatorDataUpdateCoordinator, Ferminator | Graviator]:
+    """Return the Ferminator or unlinked Graviator of a device and the coordinator of its loaded config entry.
+
+    A linked Graviator is refused, as BrewCreator copies the Ferminator's batch info to it.
+    """
     device = dr.async_get(hass).async_get(device_id)
     if device is not None:
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             coordinator: BrewCreatorDataUpdateCoordinator = entry.runtime_data
             for equipment_id in equipment_ids(device):
                 equipment = coordinator.data.equipment.get(equipment_id)
-                if isinstance(equipment, Ferminator):
-                    return coordinator, equipment
+                if not isinstance(equipment, BATCH_INFO_EQUIPMENT):
+                    continue
+                owner = batch_owner(equipment, coordinator.data.equipment)
+                if owner is not equipment:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN,
+                        translation_key="linked_to_ferminator",
+                        translation_placeholders={"name": equipment.name, "ferminator": owner.name},
+                    )
+                return coordinator, equipment
     raise ServiceValidationError(
         translation_domain=DOMAIN,
-        translation_key="not_a_ferminator",
+        translation_key="no_batch_info",
         translation_placeholders={"device_id": device_id},
     )
 
 
 def _validate_gravities(
-    ferminator: Ferminator, og: float | None, fg: float | None
+    equipment: BrewCreatorEquipment, og: float | None, fg: float | None
 ) -> None:
     """Require the final gravity to be below the original gravity, like BrewCreator's batch info form.
 
     A gravity that isn't given is taken from the current batch info. An original gravity of 0 means it isn't set.
     """
-    batch_info = ferminator.batch_info
+    batch_info = equipment.batch_info
     if og is None and batch_info is not None:
         og = batch_info.og
     if fg is None and batch_info is not None:

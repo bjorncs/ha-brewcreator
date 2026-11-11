@@ -2,8 +2,8 @@
 
 The LLM tools platform (llm.py) offers these intents as tools to LLM conversation agents through the Assist API, and
 to MCP clients through the MCP Server integration; a new intent only becomes a tool once it is added to
-llm.LLM_INTENTS. The intents give those agents what the built-in intents don't: a summary of a brew, the batch info and
-the hydrometer linked to a Ferminator.
+llm.LLM_INTENTS. The intents give those agents what the built-in intents don't: a summary of a brew, the batch info of a
+Ferminator or an unlinked Graviator, and the hydrometer linked to a Ferminator.
 
 An intent only sees equipment whose device has an entity exposed to the assistant asking, such as the Ferminator's
 climate entity.
@@ -27,7 +27,17 @@ from homeassistant.helpers import (
 )
 from homeassistant.util import dt as dt_util
 
-from .api import BrewCreatorEquipment, BrewCreatorError, Ferminator, FerminatorMode, Hydrometer, linked_ferminator
+from .api import (
+    BATCH_INFO_EQUIPMENT,
+    BrewCreatorEquipment,
+    BrewCreatorError,
+    EquipmentTypes,
+    Ferminator,
+    FerminatorMode,
+    Hydrometer,
+    batch_owner,
+    linked_ferminator,
+)
 from .climate import FAN_SPEEDS
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
@@ -94,7 +104,7 @@ class _Target:
 def _iter_exposed(
     hass: HomeAssistant,
     assistant: str | None,
-    equipment_type: type[BrewCreatorEquipment] | tuple[type[BrewCreatorEquipment], ...] = (Ferminator, Hydrometer),
+    equipment_type: EquipmentTypes = (Ferminator, Hydrometer),
 ) -> Iterator[_Target]:
     """Yield the equipment of the type whose device has an entity exposed to the assistant.
 
@@ -124,13 +134,15 @@ def _exposed_targets(hass: HomeAssistant, assistant: str | None) -> list[_Target
 
 
 def has_exposed(
-    hass: HomeAssistant, assistant: str | None, equipment_type: type[BrewCreatorEquipment]
+    hass: HomeAssistant,
+    assistant: str | None,
+    equipment_type: EquipmentTypes,
 ) -> bool:
     """Return whether any equipment of the type is exposed to the assistant, stopping at the first."""
     return next(_iter_exposed(hass, assistant, equipment_type), None) is not None
 
 
-def _of_type(targets: list[_Target], equipment_type: type[BrewCreatorEquipment]) -> list[_Target]:
+def _of_type(targets: list[_Target], equipment_type: EquipmentTypes) -> list[_Target]:
     return [t for t in targets if isinstance(t.equipment, equipment_type)]
 
 
@@ -215,7 +227,9 @@ class GetFermentationStatusIntentHandler(intent.IntentHandler):
         status: dict[str, Any] = {}
         if ferminator is not None:
             status["ferminator"] = _ferminator_status(ferminator)
-            status["batch"] = _batch_status(ferminator)
+        owner = batch_owner(target.equipment, target.coordinator.data.equipment)
+        if owner is not None and owner.id in exposed_ids:
+            status["batch"] = _batch_status(owner)
         if hydrometer is not None:
             status["hydrometer"] = _hydrometer_status(hydrometer)
 
@@ -249,15 +263,15 @@ def _ferminator_status(ferminator: Ferminator) -> dict[str, Any]:
     return {k: v for k, v in status.items() if v is not None}
 
 
-def _batch_status(ferminator: Ferminator) -> dict[str, Any]:
-    batch = ferminator.batch_info
+def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
+    batch = equipment.batch_info
     if batch is None:
         return {}
     status: dict[str, Any] = {
         "name": batch.brew_name or None,
         "beer_style": batch.beer_style or None,
         "owner": batch.owner or None,
-        "started": ferminator.is_logging_data,
+        "started": equipment.is_logging_data,
         # An original gravity of 0 means it isn't set
         "original_gravity": batch.og or None,
         "final_gravity": batch.fg or None,
@@ -313,15 +327,16 @@ def _speech(name: str, status: dict[str, Any]) -> str:
 
 
 class SetBatchInfoIntentHandler(intent.IntentHandler):
-    """Change the batch info of a Ferminator, through the set_batch_info action."""
+    """Change the batch info of a Ferminator or an unlinked Graviator, through the set_batch_info action."""
 
     intent_type = INTENT_SET_BATCH_INFO
     description = (
-        "Changes the batch info of a BrewCreator Ferminator: batch name, owner, beer style, gravities, colour, "
-        "bitterness, volume, fermentation type, and whether BrewCreator logs the brew. Only the given fields are "
-        "changed. Give at least one. It doesn't control the Ferminator itself: to turn temperature regulation on or "
-        "off, or change the target temperature or fan speed, control the Ferminator's climate entity, "
-        "for example with HassTurnOn, HassTurnOff or HassClimateSetTemperature."
+        "Changes the batch info of a BrewCreator Ferminator, or of a Graviator hydrometer not linked to a Ferminator: "
+        "batch name, owner, beer style, gravities, colour, bitterness, volume, fermentation type, and whether "
+        "BrewCreator logs the brew. A linked Graviator has the batch info of its Ferminator, so change that instead. "
+        "Only the given fields are changed. Give at least one. It doesn't control the Ferminator itself: to turn "
+        "temperature regulation on or off, or change the target temperature or fan speed, control the Ferminator's "
+        "climate entity, for example with HassTurnOn, HassTurnOff or HassClimateSetTemperature."
     )
     platforms = None
 
@@ -330,7 +345,8 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
         return {
             vol.Optional(
                 SLOT_NAME,
-                description="Name of the Ferminator. Can be left out when there is only one.",
+                description="Name of the Ferminator or Graviator. Can be left out when there is only one Ferminator "
+                "or unlinked Graviator.",
             ): _TEXT,
             vol.Optional(ATTR_BATCH_NAME, description="Name of the batch."): _TEXT,
             vol.Optional(ATTR_OWNER, description="The brewer of the batch."): _TEXT,
@@ -362,9 +378,11 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         slots = self.async_validate_slots(intent_obj.slots)
-        ferminators = _of_type(_exposed_targets(intent_obj.hass, intent_obj.assistant), Ferminator)
+        targets = _of_type(_exposed_targets(intent_obj.hass, intent_obj.assistant), BATCH_INFO_EQUIPMENT)
+        # A linked Graviator can be named, so the action can explain that it has its Ferminator's batch info
+        unlinked = [t for t in targets if batch_owner(t.equipment, t.coordinator.data.equipment) is t.equipment]
         target = _match_target(
-            ferminators, _slot_value(slots, SLOT_NAME), "Ferminator", default=ferminators
+            targets, _slot_value(slots, SLOT_NAME), "Ferminator or Graviator", default=unlinked
         )
         fields = {f: _slot_value(slots, f) for f in BATCH_FIELDS if f in slots}
         if not fields:
@@ -382,7 +400,7 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
 
         response = intent_obj.create_response()
         response.async_set_speech(f"Changed the batch info of {target.name}.")
-        response.async_set_speech_slots({"ferminator": target.name, "changed": fields})
+        response.async_set_speech_slots({"name": target.name, "changed": fields})
         return response
 
 

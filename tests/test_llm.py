@@ -12,7 +12,7 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
 )
 from custom_components.brewcreator.llm import async_get_tools
-from tests.factories import ferminator, ha_device, tilt, tool_parameters
+from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
 
 
 class LLMToolsTestCase(unittest.TestCase):
@@ -79,6 +79,13 @@ class LLMToolsTestCase(unittest.TestCase):
     def test_only_status_without_an_exposed_ferminator(self):
         self.setup(ferminator("f"), tilt("t"), exposed=["t"])
         self.assertEqual(["brewcreator__GetFermentationStatus"], [t.name for t in self.tools().tools])
+
+    def test_batch_info_without_an_exposed_ferminator_with_an_exposed_graviator(self):
+        self.setup(ferminator("f"), graviator("g"), exposed=["g"])
+        self.assertEqual(
+            ["brewcreator__GetFermentationStatus", "brewcreator__SetBatchInfo"],
+            [t.name for t in self.tools().tools],
+        )
 
     def test_nothing_exposed(self):
         self.setup(ferminator("f"), tilt("t"), exposed=[])

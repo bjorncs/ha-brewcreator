@@ -26,11 +26,11 @@
     "services": {
         "set_batch_info": {
             "name": "Set batch info",
-            "description": "Changes the batch info of a Ferminator in BrewCreator, such as its name, gravities and whether the brew is started. Only the fields you give are changed. Give at least one.",
+            "description": "Changes the batch info of a Ferminator, or of a Graviator not linked to one, in BrewCreator, such as its name, gravities and whether the brew is started. Only the fields you give are changed. Give at least one.",
             "fields": {
                 "device_id": {
-                    "name": "Ferminator",
-                    "description": "The Ferminator whose batch to change."
+                    "name": "Device",
+                    "description": "The Ferminator, or the Graviator not linked to a Ferminator, whose batch to change."
                 },
                 "batch_name": {
                     "name": "Batch name",
@@ -84,8 +84,11 @@
         }
     },
     "exceptions": {
-        "not_a_ferminator": {
-            "message": "Device {device_id} is not a Ferminator of a loaded BrewCreator integration."
+        "no_batch_info": {
+            "message": "Device {device_id} is not a Ferminator or Graviator of a loaded BrewCreator integration."
+        },
+        "linked_to_ferminator": {
+            "message": "{name} is linked to {ferminator}. Change the batch info on the Ferminator."
         },
         "control_failed": {
             "message": "Failed to change the temperature control of {name} in BrewCreator: {error}"

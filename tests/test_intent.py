@@ -20,7 +20,7 @@ from custom_components.brewcreator.intent import (
     SetBatchInfoIntentHandler,
     async_setup_intents,
 )
-from tests.factories import ferminator, ha_device, tilt, tool_parameters
+from tests.factories import ferminator, graviator, ha_device, tilt, tool_parameters
 
 BATCH = {
     "brewName": "Christmas Miracle",
@@ -204,6 +204,18 @@ class FermentationStatusTestCase(IntentTestCase):
         self.setup(ferminator("f", connected=["t"]), tilt("t", name="Tilt Orange"), exposed={"f"})
         self.assertNotIn("hydrometer", self.status().speech_slots)
 
+    def test_unlinked_graviator_includes_its_own_batch(self):
+        self.setup(ferminator("f"), graviator("g", name="Graviator", brewName="Lager"))
+        status = self.status(name="Graviator").speech_slots
+        self.assertEqual("Lager", status["batch"]["name"])
+        self.assertNotIn("ferminator", status)
+
+    def test_graviator_with_unexposed_linked_ferminator_has_no_batch(self):
+        self.setup(
+            ferminator("f", connected=["g"], **BATCH), graviator("g", name="Graviator", brewName="Copy"), exposed={"g"}
+        )
+        self.assertEqual({"hydrometer"}, self.status(name="Graviator").speech_slots.keys())
+
     def test_unexposed_linked_ferminator_is_left_out(self):
         self.setup(ferminator("f", connected=["t"], **BATCH), tilt("t", name="Tilt Orange"), exposed={"t"})
         status = self.status(name="Tilt Orange").speech_slots
@@ -263,7 +275,29 @@ class SetBatchInfoTestCase(IntentTestCase):
             self.set_batch_info(final_gravity=1.070)
         self.assertIn("FG must be below OG", str(raised.exception))
 
-    def test_hydrometers_are_not_targets(self):
+    def test_unlinked_graviator_is_a_target(self):
+        devices = self.setup(graviator("g", name="Graviator"))
+        response = self.set_batch_info(owner="Bob")
+        _, _, data = self.hass.services.async_call.await_args.args
+        self.assertEqual({"device_id": devices["g"].id, "owner": "Bob"}, data)
+        self.assertEqual("Graviator", response.speech_slots["name"])
+
+    def test_linked_graviator_is_not_the_default(self):
+        devices = self.setup(ferminator("f", connected=["g"]), graviator("g", name="Graviator"))
+        self.set_batch_info(owner="Bob")
+        _, _, data = self.hass.services.async_call.await_args.args
+        self.assertEqual(devices["f"].id, data["device_id"])
+
+    def test_linked_graviator_by_name_gets_the_actions_error(self):
+        devices = self.setup(ferminator("f", connected=["g"]), graviator("g", name="Graviator"))
+        self.hass.services.async_call.side_effect = ServiceValidationError("linked to Ferminator")
+        with self.assertRaises(intent.IntentHandleError) as raised:
+            self.set_batch_info(name="Graviator", owner="Bob")
+        self.assertIn("linked to Ferminator", str(raised.exception))
+        _, _, data = self.hass.services.async_call.await_args.args
+        self.assertEqual(devices["g"].id, data["device_id"])
+
+    def test_tilts_are_not_targets(self):
         self.setup(ferminator("f", name="Left"), ferminator("o", name="Right"), tilt("t", name="Tilt"))
         with self.assertRaises(intent.IntentHandleError):
             self.set_batch_info(name="Tilt", owner="Bob")

@@ -16,8 +16,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .api import BatchInfo, FermentationType
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .entity import (
+    BatchInfoEntity,
     FerminatorEntity,
     HydrometerEntity,
+    register_batch_info_entities,
     register_ferminator_entities,
     register_hydrometer_entities,
 )
@@ -35,16 +37,22 @@ async def async_setup_entry(
         lambda coordinator, id: [
             FerminatorProbeTemperatureEntity(coordinator, id),
             FerminatorLastActivityEntity(coordinator, id),
-            FerminatorBrewDateEntity(coordinator, id),
-            FerminatorBatchNameEntity(coordinator, id),
-            FerminatorOriginalGravityEntity(coordinator, id),
-            FerminatorFinalGravityEntity(coordinator, id),
-            FerminatorOwnerEntity(coordinator, id),
-            FerminatorEbcEntity(coordinator, id),
-            FerminatorIbuEntity(coordinator, id),
-            FerminatorBatchVolumeEntity(coordinator, id),
-            FerminatorFermentationTypeEntity(coordinator, id),
-            FerminatorBeerStyleEntity(coordinator, id),
+        ],
+    )
+    register_batch_info_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, id: [
+            BrewDateEntity(coordinator, id),
+            BatchNameEntity(coordinator, id),
+            OriginalGravityEntity(coordinator, id),
+            FinalGravityEntity(coordinator, id),
+            OwnerEntity(coordinator, id),
+            EbcEntity(coordinator, id),
+            IbuEntity(coordinator, id),
+            BatchVolumeEntity(coordinator, id),
+            FermentationTypeEntity(coordinator, id),
+            BeerStyleEntity(coordinator, id),
         ],
     )
     register_hydrometer_entities(
@@ -197,19 +205,19 @@ class FerminatorLastActivityEntity(FerminatorSensorEntity):
         return self._equipment_available and self.native_value is not None
 
 
-class FerminatorBatchSensorEntity(FerminatorSensorEntity, ABC):
-    """A field of the Ferminator's batch info, unknown while it has no batch."""
+class BatchInfoSensorEntity(BatchInfoEntity, SensorEntity, ABC):
+    """A field of the batch info of a Ferminator or an unlinked Graviator, unknown while it has no batch."""
 
     @property
     def native_value(self):
-        batch_info = self._ferminator().batch_info
+        batch_info = self._brewcreator_device.batch_info
         return self._batch_value(batch_info) if batch_info is not None else None
 
     @abstractmethod
     def _batch_value(self, batch_info: BatchInfo): ...
 
 
-class FerminatorBrewDateEntity(FerminatorBatchSensorEntity):
+class BrewDateEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         super().__init__(coordinator, id, "brew_date", "brew_date")
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -218,7 +226,7 @@ class FerminatorBrewDateEntity(FerminatorBatchSensorEntity):
         return batch_info.brew_date
 
 
-class FerminatorOwnerEntity(FerminatorBatchSensorEntity):
+class OwnerEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         super().__init__(coordinator, id, "owner", "owner")
 
@@ -226,30 +234,30 @@ class FerminatorOwnerEntity(FerminatorBatchSensorEntity):
         return batch_info.owner
 
 
-class FerminatorEbcEntity(FerminatorBatchSensorEntity):
+class EbcEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
+        # Batch info rather than a measurement, so it has no state class
         super().__init__(coordinator, id, "ebc", "ebc")
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "EBC"
 
     def _batch_value(self, batch_info: BatchInfo) -> float | None:
         return batch_info.ebc
 
 
-class FerminatorIbuEntity(FerminatorBatchSensorEntity):
+class IbuEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
+        # Batch info rather than a measurement, so it has no state class
         super().__init__(coordinator, id, "ibu", "ibu")
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "IBU"
 
     def _batch_value(self, batch_info: BatchInfo) -> float | None:
         return batch_info.ibu
 
 
-class FerminatorBatchVolumeEntity(FerminatorBatchSensorEntity):
+class BatchVolumeEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
+        # Batch info rather than a measurement, so it has no state class
         super().__init__(coordinator, id, "batch_volume", "batch_volume")
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_device_class = SensorDeviceClass.VOLUME_STORAGE
         self._attr_native_unit_of_measurement = UnitOfVolume.LITERS
 
@@ -257,7 +265,7 @@ class FerminatorBatchVolumeEntity(FerminatorBatchSensorEntity):
         return batch_info.volume
 
 
-class FerminatorFermentationTypeEntity(FerminatorBatchSensorEntity):
+class FermentationTypeEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         super().__init__(coordinator, id, "fermentation_type", "fermentation_type")
         self._attr_device_class = SensorDeviceClass.ENUM
@@ -268,7 +276,7 @@ class FerminatorFermentationTypeEntity(FerminatorBatchSensorEntity):
         return fermentation_type.name.lower() if fermentation_type is not None else None
 
 
-class FerminatorBeerStyleEntity(FerminatorBatchSensorEntity):
+class BeerStyleEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         super().__init__(coordinator, id, "beer_style", "beer_style")
 
@@ -276,7 +284,7 @@ class FerminatorBeerStyleEntity(FerminatorBatchSensorEntity):
         return batch_info.beer_style
 
 
-class FerminatorBatchNameEntity(FerminatorBatchSensorEntity):
+class BatchNameEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         super().__init__(coordinator, id, "batch_name", "batch_name")
 
@@ -284,7 +292,7 @@ class FerminatorBatchNameEntity(FerminatorBatchSensorEntity):
         return batch_info.brew_name
 
 
-class FerminatorOriginalGravityEntity(FerminatorBatchSensorEntity):
+class OriginalGravityEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         # Batch info rather than a measurement, so it has no state class
         super().__init__(coordinator, id, "original_gravity", "original_gravity")
@@ -294,7 +302,7 @@ class FerminatorOriginalGravityEntity(FerminatorBatchSensorEntity):
         return batch_info.og
 
 
-class FerminatorFinalGravityEntity(FerminatorBatchSensorEntity):
+class FinalGravityEntity(BatchInfoSensorEntity):
     def __init__(self, coordinator: BrewCreatorDataUpdateCoordinator, id: str) -> None:
         # Batch info rather than a measurement, so it has no state class
         super().__init__(coordinator, id, "final_gravity", "final_gravity")

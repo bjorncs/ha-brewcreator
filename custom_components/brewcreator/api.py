@@ -195,7 +195,7 @@ class BrewCreatorEquipment(ABC):
 
     @property
     def batch_info(self) -> BatchInfo | None:
-        if self._json["brewName"]:
+        if self._json.get("brewName"):
             return BatchInfo(self._json)
         return None
 
@@ -432,6 +432,26 @@ def linked_ferminator(
         ),
         None,
     )
+
+
+type EquipmentTypes = type[BrewCreatorEquipment] | tuple[type[BrewCreatorEquipment], ...]
+"""One equipment type, or a tuple of them, as isinstance() takes."""
+
+BATCH_INFO_EQUIPMENT = (Ferminator, Graviator)
+"""The equipment that can have a batch of its own: a Ferminator, or a Graviator logging over Wi-Fi."""
+
+
+def batch_owner(
+    equipment: BrewCreatorEquipment, all_equipment: Mapping[str, BrewCreatorEquipment]
+) -> BrewCreatorEquipment | None:
+    """Return the equipment whose batch info applies to the equipment, if any.
+
+    A Ferminator and an unlinked Graviator own their batch. A linked hydrometer gets its Ferminator's batch, which
+    BrewCreator copies to it when linking. An unlinked Tilt has none, as it only reports through a Ferminator.
+    """
+    if isinstance(equipment, Hydrometer) and (ferminator := linked_ferminator(equipment, all_equipment)) is not None:
+        return ferminator
+    return equipment if isinstance(equipment, BATCH_INFO_EQUIPMENT) else None
 
 
 def linkable_hydrometers(

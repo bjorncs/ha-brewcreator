@@ -7,34 +7,12 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import voluptuous as vol
 
 from custom_components.brewcreator.api import BrewCreatorError
-from custom_components.brewcreator.binary_sensor import FerminatorBatchStartedEntity
 from custom_components.brewcreator.coordinator import BrewCreatorData
-from custom_components.brewcreator.sensor import (
-    FerminatorBatchNameEntity,
-    FerminatorFermentationTypeEntity,
-    FerminatorFinalGravityEntity,
-    FerminatorOriginalGravityEntity,
-)
 from custom_components.brewcreator.services import (
     SET_BATCH_INFO_SCHEMA,
     _async_set_batch_info,
 )
-from tests.factories import ferminator, ha_device, tilt
-
-BATCH = {
-    "brewName": "Christmas Miracle",
-    "owner": "bjorncs",
-    "brewDate": "2026-11-08T10:00:00+00:00",
-    "ebc": 34,
-    "ibu": 26,
-    "volume": 21,
-    "fermented": "Top",
-    "og": 1.058,
-    "fg": 1.015,
-    "beerStyle": "Scottish Export",
-    "isLoggingData": True,
-}
-
+from tests.factories import BATCH, ferminator, graviator, ha_device, tilt
 
 def batch_ferminator(**batch):
     f = ferminator(**{**BATCH, **batch})
@@ -150,7 +128,22 @@ class SetBatchInfoTestCase(unittest.TestCase):
     def test_hydrometer_is_refused(self, dr):
         with self.assertRaises(ServiceValidationError) as raised:
             self.call(dr, [batch_ferminator(), tilt()], device_identifier="t", batch_name="X")
-        self.assertEqual("not_a_ferminator", raised.exception.translation_key)
+        self.assertEqual("no_batch_info", raised.exception.translation_key)
+
+    def test_unlinked_graviator_is_accepted(self, dr):
+        g = graviator("g", **BATCH)
+        g._api._update_equipment_state = AsyncMock(return_value=None)
+        coordinator = self.call(dr, [batch_ferminator(), g], device_identifier="g", batch_name="Lager")
+        g._api._update_equipment_state.assert_awaited_once_with("g", {"brewName": "Lager"})
+        coordinator.async_refresh.assert_awaited_once()
+
+    def test_linked_graviator_is_refused(self, dr):
+        g = graviator("g", **BATCH)
+        g._api._update_equipment_state = AsyncMock(return_value=None)
+        with self.assertRaises(ServiceValidationError) as raised:
+            self.call(dr, [batch_ferminator(connected=["g"]), g], device_identifier="g", batch_name="X")
+        self.assertEqual("linked_to_ferminator", raised.exception.translation_key)
+        g._api._update_equipment_state.assert_not_awaited()
 
     def test_unknown_device_is_refused(self, dr):
         with self.assertRaises(ServiceValidationError):
@@ -186,43 +179,6 @@ class SetBatchInfoSchemaTestCase(unittest.TestCase):
         ):
             with self.subTest(field=field), self.assertRaises(vol.Invalid):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", field: value})
-
-
-class BatchSensorTestCase(unittest.TestCase):
-    def entities(self, f):
-        coordinator = MagicMock()
-        coordinator.data = BrewCreatorData(equipment={f.id: f})
-        return (
-            FerminatorBatchNameEntity(coordinator, f.id),
-            FerminatorOriginalGravityEntity(coordinator, f.id),
-            FerminatorFinalGravityEntity(coordinator, f.id),
-            FerminatorBatchStartedEntity(coordinator, f.id),
-        )
-
-    def test_batch_values(self):
-        name, og, fg, started = self.entities(batch_ferminator())
-        self.assertEqual("Christmas Miracle", name.native_value)
-        self.assertEqual(1.058, og.native_value)
-        self.assertEqual(1.015, fg.native_value)
-        self.assertTrue(started.is_on)
-
-    def test_fermentation_type_is_a_translation_key(self):
-        coordinator = MagicMock()
-        f = batch_ferminator()
-        coordinator.data = BrewCreatorData(equipment={f.id: f})
-        entity = FerminatorFermentationTypeEntity(coordinator, f.id)
-        self.assertEqual(["top", "bottom"], entity.options)
-        self.assertEqual("top", entity.native_value)
-        self.assertEqual("fermentation_type", entity.translation_key)
-
-    def test_without_batch(self):
-        name, og, fg, started = self.entities(
-            batch_ferminator(brewName=None, isLoggingData=False)
-        )
-        self.assertIsNone(name.native_value)
-        self.assertIsNone(og.native_value)
-        self.assertIsNone(fg.native_value)
-        self.assertFalse(started.is_on)
 
 
 if __name__ == "__main__":
