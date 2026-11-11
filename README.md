@@ -5,6 +5,16 @@ Monitor and control your devices in [BrewCreator](https://brewcreator.com) such 
 
 ![BrewCreator](assets/images/ferminator-climate-entity.png)
 
+## Installation
+The integration needs Home Assistant 2026.11 or later, and is installed through the Home Assistant Marketplace.
+
+[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
+
+Or add it by hand: go to *Settings → Marketplace*, select *Add from link*, enter `bjorncs/ha-brewcreator` and select
+*Add*. If you're asked for the type, choose *Integration*. See
+[Custom repositories](https://www.home-assistant.io/integrations/marketplace/#custom-repositories) in the Marketplace
+documentation.
+
 ## Supported devices
 - Fercubator Connect / Ferminator Connect
 - Tilt hydrometer
@@ -114,16 +124,6 @@ regulation alone and logs a warning.
   so for up to an hour the blueprint acts on a stale temperature. After that the hydrometer's sensors, and so the
   *Beer temperature* helper, become unavailable. Once the helper has been unavailable for 2 minutes, the blueprint
   turns regulation on, and the Ferminator regulates on its built-in probe.
-
-## Installation
-The integration needs Home Assistant 2026.11 or later, and is installed through the Home Assistant Marketplace.
-
-[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
-
-Or add it by hand: go to *Settings → Marketplace*, select *Add from link*, enter `bjorncs/ha-brewcreator` and select
-*Add*. If you're asked for the type, choose *Integration*. See
-[Custom repositories](https://www.home-assistant.io/integrations/marketplace/#custom-repositories) in the Marketplace
-documentation.
 
 ## Known issues
 ### A Tilt colour selected on the Ferminator but not registered in BrewCreator
