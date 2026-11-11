@@ -158,8 +158,8 @@ uv run --no-project pre-commit install
 uv run --no-project pre-commit run --all-files
 ```
 
-CI runs the same checks and the tests on every pull request and push to `main`, next to the hassfest and HACS
-validation.
+CI runs the same checks, the tests, and Home Assistant's hassfest and HACS validation on every pull request and push
+to `main`.
 
 `tests/test_api.py` runs against the BrewCreator cloud, and is skipped unless `BREWCREATOR_USERNAME` and
 `BREWCREATOR_PASSWORD` are set.
