@@ -116,11 +116,14 @@ regulation alone and logs a warning.
   turns regulation on, and the Ferminator regulates on its built-in probe.
 
 ## Installation
-The integration needs Home Assistant 2026.11 or later.
+The integration needs Home Assistant 2026.11 or later, and is installed through the Home Assistant Marketplace.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
-- Use [HACS](https://www.hacs.xyz/docs/use/) to install the integration through the Home Assistant UI.
-  Select [Custom Repositories](https://www.hacs.xyz/docs/faq/custom_repositories/) and use repository `bjorncs/ha-brewcreator` with type `Integration`.
+[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=bjorncs&repository=ha-brewcreator&category=integration)
+
+Or add it by hand: go to *Settings → Marketplace*, select *Add from link*, enter `bjorncs/ha-brewcreator` and select
+*Add*. If you're asked for the type, choose *Integration*. See
+[Custom repositories](https://www.home-assistant.io/integrations/marketplace/#custom-repositories) in the Marketplace
+documentation.
 
 ## Known issues
 ### A Tilt colour selected on the Ferminator but not registered in BrewCreator
