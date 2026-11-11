@@ -143,5 +143,8 @@ uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requi
 `tests/test_api.py` runs against the BrewCreator cloud, and is skipped unless `BREWCREATOR_USERNAME` and
 `BREWCREATOR_PASSWORD` are set.
 
+[docs/brewcreator-api.md](docs/brewcreator-api.md) collects what has been observed about the BrewCreator API: what
+its fields mean, timings and quirks.
+
 # License
 This work is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.
