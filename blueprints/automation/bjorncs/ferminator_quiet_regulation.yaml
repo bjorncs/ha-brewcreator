@@ -11,12 +11,16 @@ blueprint:
     use about 0.9 and 1.8 instead.
 
 
+    Once regulation has been switched, it is left on or off for at least the **minimum time between switches**, so
+    a jittery temperature can't switch it on and off at every reading.
+
+
     Use a smoothed beer temperature: a Statistics helper with the characteristic "Average step" over the
     hydrometer's temperature sensor. See the README for details.
 
 
     To fail safe, regulation is turned on when the beer temperature has been unavailable for 2 minutes, e.g. when
-    the hydrometer has stopped reporting.
+    the hydrometer has stopped reporting, even within the minimum time between switches.
 
 
     It only acts while the Ferminator is online, so a Ferminator you have switched off after a batch is left alone.
@@ -67,6 +71,21 @@ blueprint:
           max: 10.0
           step: 0.1
           mode: box
+    min_switch_interval:
+      name: Minimum time between switches
+      description: >
+        Leave regulation on or off for at least this many minutes after it was last switched, by this automation or
+        by hand. Beer temperature changes slowly, so this costs little, and it keeps a jittery temperature from
+        switching regulation at every reading. A beer temperature that is unavailable still turns regulation on at
+        once.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 120
+          step: 1
+          unit_of_measurement: min
+          mode: box
 
 mode: single
 max_exceeded: silent
@@ -89,6 +108,16 @@ triggers:
     from: unavailable
     for:
       minutes: 2
+  # Apply a switch held back by the minimum time between switches once that time has passed. With to given,
+  # attribute changes don't restart the wait.
+  - trigger: state
+    id: min_switch_interval_passed
+    entity_id: !input climate_entity
+    to:
+      - "off"
+      - heat_cool
+    for:
+      minutes: !input min_switch_interval
   - trigger: homeassistant
     event: start
   - trigger: event
@@ -99,6 +128,7 @@ variables:
   temperature_sensor_input: !input temperature_sensor
   off_threshold: !input off_threshold
   on_threshold: !input on_threshold
+  min_switch_interval: !input min_switch_interval
   # An optional entity input is [] when left empty and the entity ID when set
   temperature_sensor: "{{ temperature_sensor_input if temperature_sensor_input is string else '' }}"
   target: "{{ state_attr(climate_entity, 'temperature') }}"
@@ -114,6 +144,13 @@ variables:
            >= timedelta(minutes=2) }}
   delta: "{{ (temperature | float - target | float) | abs if temperature_valid else 0 }}"
   thresholds_valid: "{{ on_threshold | float > off_threshold | float }}"
+  # Counted from the climate entity's last state change, so a switch by hand also starts the wait, as does the
+  # Ferminator coming back online or Home Assistant starting. When the wait trigger fires, its timer has decided the
+  # wait is over, as the clock comparison could fall just short.
+  min_switch_interval_passed: >-
+    {{ trigger.id == 'min_switch_interval_passed'
+       or (states[climate_entity] is not none
+           and now() - states[climate_entity].last_changed >= timedelta(minutes=min_switch_interval)) }}
 
 conditions:
   # The climate entity is unavailable while the Ferminator is offline, e.g. switched off, so it is left alone then.
@@ -141,7 +178,8 @@ actions:
             value_template: "{{ states(climate_entity) == 'off' }}"
           - condition: template
             value_template: >-
-              {{ temperature_unavailable or (temperature_valid and delta >= on_threshold) }}
+              {{ temperature_unavailable
+                 or (min_switch_interval_passed and temperature_valid and delta >= on_threshold) }}
         sequence:
           - action: climate.set_hvac_mode
             target:
@@ -154,7 +192,7 @@ actions:
             value_template: "{{ states(climate_entity) == 'heat_cool' }}"
           - condition: template
             value_template: >-
-              {{ temperature_valid and delta <= off_threshold }}
+              {{ min_switch_interval_passed and temperature_valid and delta <= off_threshold }}
         sequence:
           - action: climate.set_hvac_mode
             target:

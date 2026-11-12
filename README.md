@@ -122,20 +122,31 @@ Ferminator climate entity's current temperature as is.
 | Beer temperature | *(none)* | The smoothed beer temperature. Empty uses the climate entity's current temperature. |
 | Off threshold | 0.5 | Turn regulation off when the beer is at most this far from the target. |
 | On threshold | 1.0 | Turn regulation on when the beer is at least this far from the target. Must be larger than the off threshold. |
+| Minimum time between switches | 15 min | Leave regulation on or off for at least this long after it was last switched, by the blueprint or by hand. |
 
 Temperatures and thresholds are in your Home Assistant temperature unit. The defaults are meant for °C; with °F, use
 about 0.9 and 1.8 instead. If the on threshold isn't larger than the off threshold, the blueprint leaves
 regulation alone and logs a warning.
 
+The blueprint only turns regulation on and off; the Ferminator decides whether to heat or cool. The smoothing and
+the gap between the thresholds are what keep regulation from switching back and forth. The minimum time between
+switches is a backstop: it only limits how often regulation can switch when they don't. Without a smoothed
+temperature, for example, a standard Tilt's 0.56 °C steps are wider than the default gap, so a reading that jumps
+one step back and forth would switch regulation once per interval instead of at every reading. A switch held back is
+made once the time has passed, if it is still needed. Beer temperature changes slowly, so waiting costs little.
+
 ### Caveats
 - The blueprint only acts while the Ferminator is online, so a Ferminator you have switched off after a batch is left
-  alone. While it is online, the blueprint overrides regulation you change by hand: it turns it back on if you turned
-  it off, and off again if you turned it on while the beer is within the off threshold. Turn the automation off to
-  change regulation by hand.
+  alone. While it is online, the blueprint overrides regulation you change by hand once the minimum time between
+  switches has passed: it turns it back on if you turned it off, and off again if you turned it on while the beer is
+  within the off threshold. Turn the automation off to change regulation by hand.
 - A hydrometer that stops reporting keeps its last reading in BrewCreator until the Ferminator's next hourly upload,
   so for up to an hour the blueprint acts on a stale temperature. After that the hydrometer's sensors, and so the
   *Beer temperature* helper, become unavailable. Once the helper has been unavailable for 2 minutes, the blueprint
-  turns regulation on, and the Ferminator regulates on its built-in probe.
+  turns regulation on, even within the minimum time between switches, and the Ferminator regulates on its built-in
+  probe.
+- The minimum time between switches is counted from the climate entity's last change of state, so it also starts
+  when the Ferminator comes back online and when Home Assistant starts.
 
 ## Known issues
 ### A Tilt colour selected on the Ferminator but not registered in BrewCreator
