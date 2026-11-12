@@ -59,6 +59,9 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 | `ebc`, `ibu`, `volume`, `og`, `fg` | `0` | `null`, `""` | |
 | `fermented` | `"None"` or `0` | `null`, `""` | |
 
+- A hydrometer's `abv` is worked out from its own `og` and `sg` whenever it is read: 5.2224464 for og 1.058 and
+  sg 1.018, i.e. ((og − sg) × 1.05 / sg) / 0.79 × 100. It is `0` while `og` is cleared, and comes back as soon as
+  `og` is set again (tested on a linked Tilt). The Ferminator's own `abv` in `data2` is rounded to one decimal.
 - `fermented` is a nullable enum `FermentedType`: `None` = 0, `Top` = 1, `Bottom` = 2, as names or numbers. Any
   other string fails with 400 and an error under `errors.fermented`. The web app shows `None` as "None" ("Ingen" in
   Danish), but shows "-" for an empty string or a 0.

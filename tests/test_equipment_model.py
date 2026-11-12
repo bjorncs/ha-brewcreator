@@ -129,6 +129,17 @@ class SpecificGravityRangeTestCase(unittest.TestCase):
         self.assertIsNone(tilt(sg=None).specific_gravity)
 
 
+class AbvTestCase(unittest.TestCase):
+    def test_abv_with_an_original_gravity(self):
+        self.assertEqual(5.2224464, tilt(og=1.058, abv=5.2224464).abv)
+
+    def test_abv_without_an_original_gravity_is_unknown(self):
+        # BrewCreator reports ABV 0 while the hydrometer's original gravity isn't set
+        for og in (0, None):
+            with self.subTest(og=og):
+                self.assertIsNone(tilt(og=og, abv=0).abv)
+
+
 class TemperatureRangeTestCase(unittest.TestCase):
     def test_out_of_range_values_are_rejected(self):
         for temperature in (-20.1, -100, 120.1, 1000):

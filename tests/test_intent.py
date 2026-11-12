@@ -105,7 +105,7 @@ class FermentationStatusTestCase(IntentTestCase):
                 brewDate=brew_date.isoformat(),
                 **BATCH,
             ),
-            tilt("t", name="Tilt Orange", sg=1.020, abv=5.1),
+            tilt("t", name="Tilt Orange", sg=1.020, og=1.058, abv=5.1),
         )
         response = self.status()
         status = response.speech_slots

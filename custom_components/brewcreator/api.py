@@ -299,6 +299,12 @@ class Hydrometer(BrewCreatorEquipment, ABC):
 
     @property
     def abv(self) -> float | None:
+        """ABV, or None if the hydrometer has no original gravity.
+
+        BrewCreator works ABV out from the hydrometer's own original gravity, and reports 0 when it has none.
+        """
+        if not self._json.get("og"):
+            return None
         return self._json.get("abv")
 
     @property
