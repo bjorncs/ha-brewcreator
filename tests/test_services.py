@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import probatio
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from custom_components.brewcreator.api import BrewCreatorError
+from custom_components.brewcreator.api import BatchField, BrewCreatorError
 from custom_components.brewcreator.services import (
+    BATCH_FIELDS,
     SET_BATCH_INFO_SCHEMA,
     _async_set_batch_info,
 )
@@ -93,6 +94,48 @@ class SetBatchInfoTestCase(unittest.TestCase):
             },
         )
 
+    def test_cleared_fields_are_sent_as_brewcreators_unset_values(self, dr):
+        # BrewCreator ignores null, so a field is cleared with the value it reports for one that isn't set
+        f = batch_ferminator()
+        self.call(
+            dr,
+            [f],
+            batch_name="Easter Ale",
+            clear=["owner", "beer_style", "ebc", "ibu", "volume", "fermentation_type"],
+        )
+        f._api._update_equipment_state.assert_awaited_once_with(
+            "f",
+            {
+                "brewName": "Easter Ale",
+                "owner": "",
+                "beerStyle": "",
+                "ebc": 0,
+                "ibu": 0,
+                "volume": 0,
+                "fermented": "None",
+            },
+        )
+
+    def test_clearing_alone_is_enough(self, dr):
+        f = batch_ferminator()
+        self.call(dr, [f], clear="owner")
+        f._api._update_equipment_state.assert_awaited_once_with("f", {"owner": ""})
+
+    def test_a_field_cannot_be_both_given_and_cleared(self, dr):
+        f = batch_ferminator()
+        with self.assertRaises(ServiceValidationError) as raised:
+            self.call(dr, [f], ebc=12, clear=["owner", "ebc"])
+        self.assertEqual("set_and_cleared", raised.exception.translation_key)
+        self.assertEqual({"fields": "ebc"}, raised.exception.translation_placeholders)
+        f._api._update_equipment_state.assert_not_awaited()
+
+    def test_a_field_that_cannot_be_cleared_is_refused_before_sending(self, dr):
+        # The action can't ask for this, as only CLEARABLE_FIELDS can be cleared
+        f = batch_ferminator()
+        with self.assertRaises(ValueError):
+            asyncio.run(f.set_batch_info({BatchField.STARTED: None}))
+        f._api._update_equipment_state.assert_not_awaited()
+
     def test_final_gravity_must_be_below_current_original_gravity(self, dr):
         f = batch_ferminator()
         with self.assertRaises(ServiceValidationError) as raised:
@@ -157,6 +200,10 @@ class SetBatchInfoTestCase(unittest.TestCase):
 
 
 class SetBatchInfoSchemaTestCase(unittest.TestCase):
+    def test_batch_fields_are_the_schemas_fields(self):
+        schema_keys = {str(key) for key in SET_BATCH_INFO_SCHEMA.validators[0].schema}
+        self.assertEqual(schema_keys - {"device_id"}, set(BATCH_FIELDS))
+
     def test_at_least_one_batch_field_is_required(self):
         with self.assertRaises(probatio.Invalid):
             SET_BATCH_INFO_SCHEMA({"device_id": "d"})
@@ -174,6 +221,15 @@ class SetBatchInfoSchemaTestCase(unittest.TestCase):
         ):
             with self.subTest(field=field), self.assertRaises(probatio.Invalid):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", field: value})
+
+    def test_only_clearable_fields_can_be_cleared(self):
+        for field in ("batch_name", "original_gravity", "final_gravity", "started", "device_id"):
+            with self.subTest(field=field), self.assertRaises(probatio.Invalid):
+                SET_BATCH_INFO_SCHEMA({"device_id": "d", "clear": [field]})
+
+    def test_clear_needs_a_field(self):
+        with self.assertRaises(probatio.Invalid):
+            SET_BATCH_INFO_SCHEMA({"device_id": "d", "clear": []})
 
 
 if __name__ == "__main__":

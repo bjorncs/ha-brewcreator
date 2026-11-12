@@ -46,6 +46,7 @@ from .select import NO_HYDROMETER, hydrometers_by_option
 from .services import (
     ATTR_BATCH_NAME,
     ATTR_BEER_STYLE,
+    ATTR_CLEAR,
     ATTR_EBC,
     ATTR_FERMENTATION_TYPE,
     ATTR_FINAL_GRAVITY,
@@ -55,6 +56,7 @@ from .services import (
     ATTR_STARTED,
     ATTR_VOLUME,
     BATCH_FIELDS,
+    CLEARABLE_FIELDS,
     FERMENTATION_TYPES,
     GRAVITY,
     MAX_TEXT_LENGTH,
@@ -331,9 +333,10 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
         "Changes the batch info of a BrewCreator Ferminator, or of a Graviator hydrometer not linked to a Ferminator: "
         "batch name, owner, beer style, gravities, colour, bitterness, volume, fermentation type, and whether "
         "BrewCreator logs the brew. A linked Graviator has the batch info of its Ferminator, so change that instead. "
-        "Only the given fields are changed. Give at least one. It doesn't control the Ferminator itself: to turn "
-        "temperature regulation on or off, or change the target temperature or fan speed, control the Ferminator's "
-        "climate entity, for example with HassTurnOn, HassTurnOff or HassClimateSetTemperature."
+        "Only the given fields are changed, and those listed in clear are cleared. Give or clear at least one. It "
+        "doesn't control the Ferminator itself: to turn temperature regulation on or off, or change the target "
+        "temperature or fan speed, control the Ferminator's climate entity, for example with HassTurnOn, HassTurnOff "
+        "or HassClimateSetTemperature."
     )
     platforms = None
 
@@ -369,6 +372,10 @@ class SetBatchInfoIntentHandler(intent.IntentHandler):
                 description="true to start logging the brew's readings in BrewCreator, false to stop logging. "
                 "Doesn't turn temperature regulation on or off.",
             ): bool,
+            probatio.Optional(
+                ATTR_CLEAR,
+                description="Fields to clear, so they have no value. A field can't be both given and cleared.",
+            ): [probatio.In(list(CLEARABLE_FIELDS))],
         }
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:

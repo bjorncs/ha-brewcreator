@@ -46,6 +46,23 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 - Stopping the brew clears `brewDate` only on the Ferminator and the currently linked hydrometer.
 - Linking a hydrometer that is linked elsewhere fails with "Equipment Has Already Been Connected" (web app text).
 
+## Batch info (tested 2026-11-12 on an unlinked Tilt)
+
+- A partial `PUT /api/v1.0/equipments/<id>` changes only the fields it carries; a field sent as `null` is left as it
+  is. Every case below returned 200 with `succeeded: true`.
+- The server has no required fields or minimums, unlike the web app's Batch Info form, which requires every field and
+  EBC, IBU and volume of 1–9999. Fields are cleared like this:
+
+| Field | Clears with | Ignored | Stored as something else |
+|---|---|---|---|
+| `owner`, `beerStyle` | `""` | `null` | `0` → `"0"` |
+| `ebc`, `ibu`, `volume` | `0` | `null`, `""` | |
+| `fermented` | `"None"` or `0` | `null`, `""` | |
+
+- `fermented` is a nullable enum `FermentedType`: `None` = 0, `Top` = 1, `Bottom` = 2, as names or numbers. Any
+  other string fails with 400 and an error under `errors.fermented`. The web app shows `None` as "None" ("Ingen" in
+  Danish), but shows "-" for an empty string or a 0.
+
 ## Websocket (SignalR, `devicetwin`)
 
 - Only the Ferminator sends messages, identified by `deviceId`, which matches its `iotHubBrewEquipmentId`. Never a

@@ -243,6 +243,17 @@ class SetBatchInfoTestCase(IntentTestCase):
             {"owner": "Bob", "original_gravity": 1.060, "started": False}, response.speech_slots["changed"]
         )
 
+    def test_forwards_fields_to_clear(self):
+        devices = self.setup(ferminator("f", **BATCH))
+        self.set_batch_info(clear=["owner", "fermentation_type"])
+        _, _, data = self.hass.services.async_call.await_args.args
+        self.assertEqual({"device_id": devices["f"].id, "clear": ["owner", "fermentation_type"]}, data)
+
+    def test_clear_lists_the_clearable_fields(self):
+        clear = tool_parameters(SetBatchInfoIntentHandler())["properties"]["clear"]
+        self.assertEqual("array", clear["type"])
+        self.assertEqual(["owner", "beer_style", "ebc", "ibu", "volume", "fermentation_type"], clear["items"]["enum"])
+
     def test_points_temperature_regulation_to_the_climate_entity(self):
         # An agent once took started=true for turning temperature regulation on
         handler = SetBatchInfoIntentHandler()

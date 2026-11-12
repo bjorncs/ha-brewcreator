@@ -85,6 +85,11 @@ class BatchValuesTestCase(unittest.TestCase):
         self.assertIsNone(fg.native_value)
         self.assertIsNone(f.batch_info.owner)
 
+    def test_cleared_fermentation_type_is_unknown(self):
+        f = batch_ferminator(fermented="None")
+        entity = sensor(coordinator(f), f.id, "fermentation_type", batch_info=True)
+        self.assertIsNone(entity.native_value)
+
     def test_brew_date_without_time_zone_is_utc(self):
         f = batch_ferminator(brewDate="2026-11-08T10:00:00")
         self.assertEqual(datetime(2026, 11, 8, 10, tzinfo=UTC), f.batch_info.brew_date)

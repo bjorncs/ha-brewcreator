@@ -26,7 +26,7 @@
   "services": {
     "set_batch_info": {
       "name": "Set batch info",
-      "description": "Changes the batch info of a Ferminator, or of a Graviator not linked to one, in BrewCreator, such as its name, gravities and whether the brew is started. Only the fields you give are changed. Give at least one.",
+      "description": "Changes the batch info of a Ferminator, or of a Graviator not linked to one, in BrewCreator, such as its name, gravities and whether the brew is started. Only the fields you give or clear are changed. Give or clear at least one.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -71,6 +71,10 @@
         "started": {
           "name": "Started",
           "description": "Start (true) or stop (false) the brew. BrewCreator logs the brew's readings while it is started."
+        },
+        "clear": {
+          "name": "Clear",
+          "description": "Fields to clear, so they have no value. A field can't be both given and cleared."
         }
       }
     }
@@ -80,6 +84,16 @@
       "options": {
         "top": "Top",
         "bottom": "Bottom"
+      }
+    },
+    "clearable_field": {
+      "options": {
+        "owner": "Owner",
+        "beer_style": "Beer style",
+        "ebc": "EBC",
+        "ibu": "IBU",
+        "volume": "Volume",
+        "fermentation_type": "Fermentation type"
       }
     }
   },
@@ -95,6 +109,9 @@
     },
     "final_gravity_not_below_original": {
       "message": "The final gravity ({fg}) must be below the original gravity ({og}). Give both to change them together."
+    },
+    "set_and_cleared": {
+      "message": "Can't both give and clear {fields}. Give a field a value or clear it."
     },
     "update_failed": {
       "message": "Failed to update the batch info of {name} in BrewCreator: {error}"

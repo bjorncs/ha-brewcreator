@@ -52,6 +52,16 @@ A Graviator that isn't linked to a Ferminator logs over Wi-Fi with a batch of it
 and the action accepts it too. While a Graviator is linked, BrewCreator gives it the Ferminator's batch info: its own
 batch sensors are unavailable then, and the batch is changed on the Ferminator.
 
+To clear fields so they have no value, list them in `clear`. The owner, beer style, EBC, IBU, volume and
+fermentation type can be cleared:
+
+```yaml
+action: brewcreator.set_batch_info
+data:
+  device_id: <your Ferminator's device ID>
+  clear: [owner, ebc, fermentation_type]
+```
+
 The final gravity must be below the original gravity. Version 1.0.0 replaces the batch options dialog and the
 Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
 

@@ -71,3 +71,16 @@ set_batch_info:
     started:
       selector:
         boolean:
+    clear:
+      example: "owner"
+      selector:
+        select:
+          translation_key: clearable_field
+          multiple: true
+          options:
+            - owner
+            - beer_style
+            - ebc
+            - ibu
+            - volume
+            - fermentation_type

@@ -1,5 +1,8 @@
 """Actions of the BrewCreator integration."""
 
+from collections.abc import Mapping
+from typing import Any
+
 import probatio
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -7,7 +10,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .api import BATCH_INFO_EQUIPMENT, BrewCreatorEquipment, FermentationType, Ferminator, Graviator
+from .api import BATCH_INFO_EQUIPMENT, BatchField, BrewCreatorEquipment, FermentationType, Ferminator, Graviator
 from .const import DOMAIN
 from .coordinator import BrewCreatorDataUpdateCoordinator
 from .device import equipment_ids
@@ -24,19 +27,14 @@ ATTR_IBU = "ibu"
 ATTR_VOLUME = "volume"
 ATTR_FERMENTATION_TYPE = "fermentation_type"
 ATTR_STARTED = "started"
+ATTR_CLEAR = "clear"
 
-BATCH_FIELDS = (
-    ATTR_BATCH_NAME,
-    ATTR_OWNER,
-    ATTR_BEER_STYLE,
-    ATTR_ORIGINAL_GRAVITY,
-    ATTR_FINAL_GRAVITY,
-    ATTR_EBC,
-    ATTR_IBU,
-    ATTR_VOLUME,
-    ATTR_FERMENTATION_TYPE,
-    ATTR_STARTED,
-)
+# The action's fields besides the device, of which at least one must be given
+BATCH_FIELDS = (*(f.key for f in BatchField), ATTR_CLEAR)
+
+# The fields the clear field can name. The batch name can't be cleared, as BrewCreator equipment without one has no
+# batch info.
+CLEARABLE_FIELDS = {f.key: f for f in BatchField if f.unset_value is not None}
 
 # The limits of BrewCreator's batch info form
 MAX_TEXT_LENGTH = 128
@@ -49,6 +47,7 @@ FERMENTATION_TYPES = {t.key: t for t in FermentationType}
 TEXT = probatio.All(cv.string, probatio.Length(min=1, max=MAX_TEXT_LENGTH))
 GRAVITY = probatio.All(probatio.Coerce(float), probatio.Range(min=MIN_GRAVITY, max=MAX_GRAVITY))
 POSITIVE_INTEGER = probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=MAX_INTEGER))
+CLEAR = probatio.All(cv.ensure_list, probatio.Length(min=1), [probatio.In(list(CLEARABLE_FIELDS))])
 
 SET_BATCH_INFO_SCHEMA = probatio.All(
     probatio.Schema(
@@ -62,8 +61,11 @@ SET_BATCH_INFO_SCHEMA = probatio.All(
             probatio.Optional(ATTR_EBC): POSITIVE_INTEGER,
             probatio.Optional(ATTR_IBU): POSITIVE_INTEGER,
             probatio.Optional(ATTR_VOLUME): POSITIVE_INTEGER,
-            probatio.Optional(ATTR_FERMENTATION_TYPE): probatio.In(list(FERMENTATION_TYPES)),
+            probatio.Optional(ATTR_FERMENTATION_TYPE): probatio.All(
+                probatio.In(list(FERMENTATION_TYPES)), FERMENTATION_TYPES.__getitem__
+            ),
             probatio.Optional(ATTR_STARTED): cv.boolean,
+            probatio.Optional(ATTR_CLEAR): CLEAR,
         }
     ),
     cv.has_at_least_one_key(*BATCH_FIELDS),
@@ -82,25 +84,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
 
 async def _async_set_batch_info(call: ServiceCall) -> None:
-    """Change the given batch info fields of a Ferminator or an unlinked Graviator, leaving the others as they are."""
-    coordinator, equipment = _find_batch_equipment(call.hass, call.data[ATTR_DEVICE_ID])
+    """Change or clear the given batch info fields of a Ferminator or an unlinked Graviator, leaving the others."""
     data = call.data
+    _validate_not_set_and_cleared(data)
+    coordinator, equipment = _find_batch_equipment(call.hass, data[ATTR_DEVICE_ID])
     _validate_gravities(equipment, data.get(ATTR_ORIGINAL_GRAVITY), data.get(ATTR_FINAL_GRAVITY))
-    fermentation_type = data.get(ATTR_FERMENTATION_TYPE)
+    changes = {field: data[field.key] for field in BatchField if field.key in data}
+    changes.update({CLEARABLE_FIELDS[key]: None for key in data.get(ATTR_CLEAR, ())})
     # Refreshed at once, so the batch sensors show the new values when the action returns
     await coordinator.async_send(
-        equipment.set_batch_info(
-            brew_name=data.get(ATTR_BATCH_NAME),
-            owner=data.get(ATTR_OWNER),
-            beer_style=data.get(ATTR_BEER_STYLE),
-            og=data.get(ATTR_ORIGINAL_GRAVITY),
-            fg=data.get(ATTR_FINAL_GRAVITY),
-            ebc=data.get(ATTR_EBC),
-            ibu=data.get(ATTR_IBU),
-            volume=data.get(ATTR_VOLUME),
-            fermentation_type=FERMENTATION_TYPES[fermentation_type] if fermentation_type is not None else None,
-            is_logging_data=data.get(ATTR_STARTED),
-        ),
+        equipment.set_batch_info(changes),
         "update_failed",
         equipment.name,
     )
@@ -134,6 +127,17 @@ def _find_batch_equipment(
         translation_key="no_batch_info",
         translation_placeholders={"device_id": device_id},
     )
+
+
+def _validate_not_set_and_cleared(data: Mapping[str, Any]) -> None:
+    """Refuse a field that is both given a value and cleared."""
+    both = [field for field in data.get(ATTR_CLEAR, ()) if field in data]
+    if both:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="set_and_cleared",
+            translation_placeholders={"fields": ", ".join(both)},
+        )
 
 
 def _validate_gravities(equipment: BrewCreatorEquipment, og: float | None, fg: float | None) -> None:

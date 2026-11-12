@@ -80,10 +80,43 @@ class FermentationType(Enum):
         return self.name.lower()
 
 
+class BatchField(Enum):
+    """A batch info field: its JSON key, and the value BrewCreator reports while it isn't set, or None if it can't be
+    cleared.
+
+    BrewCreator ignores a field sent as null, so a field is cleared by sending the value it reports while it isn't set.
+    """
+
+    json_key: str
+    unset_value: str | int | None
+
+    # Equipment without a batch name has no batch info, so the name isn't cleared
+    BATCH_NAME = "brewName", None
+    OWNER = "owner", ""
+    BEER_STYLE = "beerStyle", ""
+    ORIGINAL_GRAVITY = "og", None
+    FINAL_GRAVITY = "fg", None
+    EBC = "ebc", 0
+    IBU = "ibu", 0
+    VOLUME = "volume", 0
+    FERMENTATION_TYPE = "fermented", "None"
+    STARTED = "isLoggingData", None
+
+    def __init__(self, json_key: str, unset_value: str | int | None) -> None:
+        self.json_key = json_key
+        self.unset_value = unset_value
+
+    @property
+    def key(self) -> str:
+        """The lower case name, as the set_batch_info action names the field."""
+        return self.name.lower()
+
+
 class BatchInfo:
     """The batch info fields of equipment JSON.
 
-    BrewCreator reports a field that isn't set as 0 or an empty string, which is returned as None.
+    BrewCreator reports a field that isn't set as 0 or an empty string, which is returned as None, and a fermentation
+    type that isn't set as "None".
     """
 
     def __init__(self, json: dict[str, Any]) -> None:
@@ -216,33 +249,18 @@ class BrewCreatorEquipment(ABC):
         """
         return None
 
-    async def set_batch_info(
-        self,
-        brew_name: str | None = None,
-        owner: str | None = None,
-        fg: float | None = None,
-        og: float | None = None,
-        ebc: float | None = None,
-        ibu: float | None = None,
-        volume: float | None = None,
-        fermentation_type: FermentationType | None = None,
-        beer_style: str | None = None,
-        is_logging_data: bool | None = None,
-    ) -> None:
-        """Change the given fields, leaving those that are None as they are."""
-        fields = {
-            "brewName": brew_name,
-            "owner": owner,
-            "fg": fg,
-            "og": og,
-            "ebc": ebc,
-            "ibu": ibu,
-            "volume": volume,
-            "fermented": fermentation_type.value if fermentation_type is not None else None,
-            "beerStyle": beer_style,
-            "isLoggingData": is_logging_data,
-        }
-        await self._update_equipment({k: v for k, v in fields.items() if v is not None})
+    async def set_batch_info(self, changes: Mapping[BatchField, Any]) -> None:
+        """Change the given fields, clearing those given as None, and leave the others as they are."""
+        payload: dict[str, Any] = {}
+        for field, value in changes.items():
+            if value is None:
+                if field.unset_value is None:
+                    raise ValueError(f"{field.key} can't be cleared")
+                value = field.unset_value
+            elif isinstance(value, Enum):
+                value = value.value
+            payload[field.json_key] = value
+        await self._update_equipment(payload)
 
     async def _update_equipment(self, json_payload: dict[str, Any]) -> None:
         await self._api._update_equipment_state(self.id, json_payload)
