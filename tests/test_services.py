@@ -101,7 +101,16 @@ class SetBatchInfoTestCase(unittest.TestCase):
             dr,
             [f],
             batch_name="Easter Ale",
-            clear=["owner", "beer_style", "ebc", "ibu", "volume", "fermentation_type"],
+            clear=[
+                "owner",
+                "beer_style",
+                "original_gravity",
+                "final_gravity",
+                "ebc",
+                "ibu",
+                "volume",
+                "fermentation_type",
+            ],
         )
         f._api._update_equipment_state.assert_awaited_once_with(
             "f",
@@ -109,6 +118,8 @@ class SetBatchInfoTestCase(unittest.TestCase):
                 "brewName": "Easter Ale",
                 "owner": "",
                 "beerStyle": "",
+                "og": 0,
+                "fg": 0,
                 "ebc": 0,
                 "ibu": 0,
                 "volume": 0,
@@ -157,6 +168,11 @@ class SetBatchInfoTestCase(unittest.TestCase):
         f = batch_ferminator(og=0)
         self.call(dr, [f], final_gravity=1.010)
         f._api._update_equipment_state.assert_awaited_once()
+
+    def test_cleared_original_gravity_is_not_compared(self, dr):
+        f = batch_ferminator()
+        self.call(dr, [f], final_gravity=1.060, clear=["original_gravity"])
+        f._api._update_equipment_state.assert_awaited_once_with("f", {"fg": 1.060, "og": 0})
 
     def test_without_batch_info_any_final_gravity_is_accepted(self, dr):
         f = batch_ferminator(brewName=None)
@@ -223,7 +239,7 @@ class SetBatchInfoSchemaTestCase(unittest.TestCase):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", field: value})
 
     def test_only_clearable_fields_can_be_cleared(self):
-        for field in ("batch_name", "original_gravity", "final_gravity", "started", "device_id"):
+        for field in ("batch_name", "started", "device_id"):
             with self.subTest(field=field), self.assertRaises(probatio.Invalid):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", "clear": [field]})
 

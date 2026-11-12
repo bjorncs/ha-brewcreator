@@ -94,8 +94,8 @@ class BatchField(Enum):
     BATCH_NAME = "brewName", None
     OWNER = "owner", ""
     BEER_STYLE = "beerStyle", ""
-    ORIGINAL_GRAVITY = "og", None
-    FINAL_GRAVITY = "fg", None
+    ORIGINAL_GRAVITY = "og", 0
+    FINAL_GRAVITY = "fg", 0
     EBC = "ebc", 0
     IBU = "ibu", 0
     VOLUME = "volume", 0

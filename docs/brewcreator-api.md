@@ -56,7 +56,7 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 | Field | Clears with | Ignored | Stored as something else |
 |---|---|---|---|
 | `owner`, `beerStyle` | `""` | `null` | `0` → `"0"` |
-| `ebc`, `ibu`, `volume` | `0` | `null`, `""` | |
+| `ebc`, `ibu`, `volume`, `og`, `fg` | `0` | `null`, `""` | |
 | `fermented` | `"None"` or `0` | `null`, `""` | |
 
 - `fermented` is a nullable enum `FermentedType`: `None` = 0, `Top` = 1, `Bottom` = 2, as names or numbers. Any

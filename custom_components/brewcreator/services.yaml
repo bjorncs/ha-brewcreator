@@ -80,6 +80,8 @@ set_batch_info:
           options:
             - owner
             - beer_style
+            - original_gravity
+            - final_gravity
             - ebc
             - ibu
             - volume

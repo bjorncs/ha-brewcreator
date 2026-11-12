@@ -252,7 +252,19 @@ class SetBatchInfoTestCase(IntentTestCase):
     def test_clear_lists_the_clearable_fields(self):
         clear = tool_parameters(SetBatchInfoIntentHandler())["properties"]["clear"]
         self.assertEqual("array", clear["type"])
-        self.assertEqual(["owner", "beer_style", "ebc", "ibu", "volume", "fermentation_type"], clear["items"]["enum"])
+        self.assertEqual(
+            [
+                "owner",
+                "beer_style",
+                "original_gravity",
+                "final_gravity",
+                "ebc",
+                "ibu",
+                "volume",
+                "fermentation_type",
+            ],
+            clear["items"]["enum"],
+        )
 
     def test_points_temperature_regulation_to_the_climate_entity(self):
         # An agent once took started=true for turning temperature regulation on

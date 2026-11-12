@@ -90,6 +90,8 @@
             "options": {
                 "owner": "Owner",
                 "beer_style": "Beer style",
+                "original_gravity": "Original gravity",
+                "final_gravity": "Final gravity",
                 "ebc": "EBC",
                 "ibu": "IBU",
                 "volume": "Volume",

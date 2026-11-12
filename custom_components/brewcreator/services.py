@@ -88,9 +88,9 @@ async def _async_set_batch_info(call: ServiceCall) -> None:
     data = call.data
     _validate_not_set_and_cleared(data)
     coordinator, equipment = _find_batch_equipment(call.hass, data[ATTR_DEVICE_ID])
-    _validate_gravities(equipment, data.get(ATTR_ORIGINAL_GRAVITY), data.get(ATTR_FINAL_GRAVITY))
     changes = {field: data[field.key] for field in BatchField if field.key in data}
     changes.update({CLEARABLE_FIELDS[key]: None for key in data.get(ATTR_CLEAR, ())})
+    _validate_gravities(equipment, changes)
     # Refreshed at once, so the batch sensors show the new values when the action returns
     await coordinator.async_send(
         equipment.set_batch_info(changes),
@@ -140,16 +140,14 @@ def _validate_not_set_and_cleared(data: Mapping[str, Any]) -> None:
         )
 
 
-def _validate_gravities(equipment: BrewCreatorEquipment, og: float | None, fg: float | None) -> None:
+def _validate_gravities(equipment: BrewCreatorEquipment, changes: Mapping[BatchField, Any]) -> None:
     """Require the final gravity to be below the original gravity, like BrewCreator's batch info form.
 
-    A gravity that isn't given is taken from the current batch info.
+    A gravity that isn't changed is taken from the current batch info, and one that is cleared isn't compared.
     """
     batch_info = equipment.batch_info
-    if og is None and batch_info is not None:
-        og = batch_info.og
-    if fg is None and batch_info is not None:
-        fg = batch_info.fg
+    og = changes.get(BatchField.ORIGINAL_GRAVITY, batch_info.og if batch_info else None)
+    fg = changes.get(BatchField.FINAL_GRAVITY, batch_info.fg if batch_info else None)
     if og is not None and fg is not None and fg >= og:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
