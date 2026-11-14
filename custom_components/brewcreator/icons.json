@@ -25,9 +25,6 @@
       "abv": {
         "default": "mdi:percent-circle-outline"
       },
-      "last_brew_log_entry": {
-        "default": "mdi:notebook-check-outline"
-      },
       "batch_name": {
         "default": "mdi:beer"
       },

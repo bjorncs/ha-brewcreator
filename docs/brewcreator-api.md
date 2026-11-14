@@ -10,7 +10,7 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 | `isActive` (Tilt) | Always `false`, even while reporting. |
 | `deviceTwinState.connectionState` | Online too, but lags `isActive` by seconds to minutes in both directions. `deviceTwinState` is null for equipment that has never been online. |
 | `isLoggingData` | "Batch started": BrewCreator logs the brew. Unrelated to temperature regulation. |
-| `lastActivityTime` (Ferminator) | Real UTC. Updated by every message from the Ferminator, including probe readings. |
+| `lastActivityTime` (Ferminator) | Real UTC. Updated by every message from the Ferminator, including probe readings, and by a PUT to it. |
 | `lastActivityTime` (hydrometer) | Time of the newest brew log point, not of the last reading; null if no brew was ever logged on it. Danish local time labelled `+00:00` (CET/CEST). |
 | `actualTemperature` (Ferminator) | The built-in probe, never the hydrometer. |
 | `sg`, `abv` (Ferminator) | A stale copy of a hydrometer reading; stayed 1.001 while the linked Tilt read 1.018. Don't use. |

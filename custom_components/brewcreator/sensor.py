@@ -58,6 +58,8 @@ FERMINATOR_SENSORS = (
         value_fn=lambda f: f.actual_temperature_builtin_probe,
         **_TEMPERATURE,
     ),
+    # BrewCreator's lastActivityTime, which on a Ferminator is the time of its last message to BrewCreator. It stays
+    # unchanged while the Ferminator has nothing to report, so it doesn't tell whether the Ferminator is online.
     BrewCreatorSensorDescription(
         key="last_activity",
         translation_key="last_activity",
@@ -76,12 +78,11 @@ HYDROMETER_SENSORS = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda h: h.specific_gravity,
     ),
-    # Time of the newest brew log point, which BrewCreator reports as the hydrometer's last activity. Meaningful
-    # whether or not the hydrometer is linked. The key is kept from when this was named "Last Activity", so the entity
-    # and its history stay.
+    # BrewCreator's lastActivityTime, which on a hydrometer is the time of its newest brew log entry, not of its last
+    # reading. Meaningful whether or not the hydrometer is linked. Named like the Ferminator's, as in BrewCreator.
     BrewCreatorSensorDescription(
         key="last_activity",
-        translation_key="last_brew_log_entry",
+        translation_key="last_activity",
         value_fn=lambda h: h.last_activity_time,
         **_LAST_ACTIVITY,
     ),

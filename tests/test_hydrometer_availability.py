@@ -97,9 +97,9 @@ class HydrometerLinkTestCase(unittest.TestCase):
 
 
 class LastActivitySensorTestCase(unittest.TestCase):
-    def test_hydrometer_sensor_is_named_last_brew_log_entry_and_keeps_unique_id(self):
+    def test_hydrometer_sensor_is_named_last_activity_and_keeps_unique_id(self):
         entity = sensor(coordinator(hydrometer(), ferminator()), "t", "last_activity")
-        self.assertEqual("last_brew_log_entry", entity.translation_key)
+        self.assertEqual("last_activity", entity.translation_key)
         self.assertEqual("brewcreator_t_last_activity", entity.unique_id)
 
     def test_hydrometer_sensor_without_brew_log_is_unavailable(self):

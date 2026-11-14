@@ -155,9 +155,6 @@
       "abv": {
         "name": "ABV"
       },
-      "last_brew_log_entry": {
-        "name": "Last brew log entry"
-      },
       "probe_temperature": {
         "name": "Built-in probe temperature"
       },

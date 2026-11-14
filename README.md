@@ -31,6 +31,10 @@ BrewCreator web app.
 A Ferminator's climate entity reports the linked hydrometer's temperature when it has a reading, and the
 Ferminator's built-in probe otherwise. The Built-in probe temperature sensor always shows the probe.
 
+Every device has a Last activity diagnostic sensor, disabled by default, which shows BrewCreator's last activity time.
+On a Ferminator, it is when the Ferminator last sent BrewCreator a message: when a reading or setting changes, and
+hourly. On a hydrometer, it is the time of the newest brew log entry, not when the hydrometer last sent a reading.
+
 ## Batch info
 A Ferminator's batch info (name, owner, beer style, OG, FG, EBC, IBU, volume, fermentation type and whether the
 brew is started) is shown as sensors and changed with the `brewcreator.set_batch_info` action. Only the fields you
