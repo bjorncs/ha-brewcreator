@@ -5,7 +5,7 @@ Monitor and control your devices in [BrewCreator](https://brewcreator.com) such 
 [Fercubator Connect](https://www.brewolution.com/fermentation/fercubator-and-accessories/fercubator-connect-wifi-thermostat-controlled-fermentation)
 (previously named Ferminator Connect) through Home Assistant.
 
-![BrewCreator](assets/images/ferminator-climate-entity.png)
+![BrewCreator dashboard in Home Assistant](assets/images/brewing-dashboard.png)
 
 ## Installation
 The integration needs Home Assistant 2026.11 or later, and is installed through the Home Assistant Marketplace.
@@ -22,24 +22,22 @@ documentation.
 - Tilt hydrometer
 - Graviator hydrometer
 
-Several hydrometers can be registered on one BrewCreator account. Devices added to BrewCreator appear in
-Home Assistant automatically, without reloading the integration, and devices removed from BrewCreator are disabled.
+**Register every device in BrewCreator first**, including each Tilt colour you use. Registered devices appear in
+Home Assistant automatically, and one account can have several hydrometers. If you select a Tilt colour in the
+Ferminator Connect's own menu that isn't registered, BrewCreator logs its readings under the Tilt already linked
+to the Ferminator.
 
 A Ferminator's Hydrometer select changes which Tilt or Graviator is linked to it, like Connect Device in the
 BrewCreator web app.
 
 A Ferminator's climate entity reports the linked hydrometer's temperature when it has a reading, and the
-Ferminator's built-in probe otherwise. The Built-in probe temperature sensor always shows the probe.
-
-Every device has a Last activity diagnostic sensor, disabled by default, which shows BrewCreator's last activity time.
-On a Ferminator, it is when the Ferminator last sent BrewCreator a message: when a reading or setting changes, and
-hourly. On a hydrometer, it is the time of the newest brew log entry, not when the hydrometer last sent a reading.
+Ferminator's built-in probe otherwise.
 
 ## Batch info
 A Ferminator's batch info (name, owner, beer style, OG, FG, EBC, IBU, volume, fermentation type and whether the
 brew is started) is shown as sensors and changed with the `brewcreator.set_batch_info` action. Only the fields you
-give are changed, so it works from the UI, scripts, automations and AI assistants that can call Home Assistant
-actions. For example, to start a new batch:
+give are changed. The action works from the UI, scripts, automations and AI assistants that can call Home
+Assistant actions. For example, to start a new batch:
 
 ```yaml
 action: brewcreator.set_batch_info
@@ -52,22 +50,15 @@ data:
   started: true
 ```
 
-A Graviator that isn't linked to a Ferminator logs over Wi-Fi with a batch of its own, so it gets the same sensors,
-and the action accepts it too. While a Graviator is linked, BrewCreator gives it the Ferminator's batch info: its own
-batch sensors are unavailable then, and the batch is changed on the Ferminator.
-
-To clear fields so they have no value, list them in `clear`. Every field but whether the brew is started can be
-cleared, such as the batch name between brews:
+To clear fields, list them in `clear`. Every field except `started` can be cleared, for example to remove the
+previous batch's details before the next brew:
 
 ```yaml
 action: brewcreator.set_batch_info
 data:
   device_id: <your Ferminator's device ID>
-  clear: [owner, ebc, fermentation_type]
+  clear: [batch_name, original_gravity, final_gravity]
 ```
-
-The final gravity must be below the original gravity. Version 1.0.0 replaces the batch options dialog and the
-Batch Started switch, Batch Name text and OG/FG number entities with this action and read-only sensors.
 
 ## Assist and AI assistants
 The integration gives LLM conversation agents (Google Gemini, OpenAI, Anthropic, Ollama, …) tools when they use the
@@ -85,36 +76,28 @@ The tools are the intents `BrewCreatorGetFermentationStatus`, `BrewCreatorSetBat
 An agent only sees Ferminators and hydrometers that have at least one entity exposed to Assist. The
 Ferminator's climate entity is exposed by default. To expose the others, go to *Settings → Voice assistants →
 Expose*. The built-in intents also work on that climate entity, for example "set the Ferminator to 12 degrees".
-Example prompts:
-
-- "How is my brew doing?"
-- "Start a new batch called Easter Ale, OG 1.050, bottom fermented."
-- "Link the orange Tilt to the Ferminator."
 
 ## Quiet regulation (reduce fan noise)
 The Ferminator's fan runs whenever temperature regulation is on, also while it is neither cooling nor heating.
-The *Ferminator quiet regulation* blueprint turns regulation off while the beer is close to its target temperature,
-and back on once it drifts too far.
+The *Ferminator quiet regulation* blueprint turns regulation off while the beer is close to its target temperature.
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fbjorncs%2Fha-brewcreator%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fbjorncs%2Fferminator_quiet_regulation.yaml)
 
 Use *Re-import blueprint* on the blueprint to get later updates.
 
-### Smooth the beer temperature first
-The hydrometer temperature that BrewCreator reports can vary by several tenths of a degree between readings, and a
-standard Tilt only reports whole degrees Fahrenheit (about 0.56 °C; a Tilt Pro reports 0.1 °F). Acting on single
-readings could switch regulation on and off far too often. Instead, create a
+Turn the automation off to change regulation by hand.
+
+### Smooth the temperature first
+The hydrometer temperature that BrewCreator reports can vary by several tenths of a degree between readings. Acting
+on single readings could switch regulation on and off far too often. Instead, create a
 [Statistics helper](https://my.home-assistant.io/redirect/config_flow_start/?domain=statistics) over the
 hydrometer's Temperature sensor with:
 
 - Name: *Beer Temperature*. Home Assistant adds the helper to the hydrometer's device and puts the device name in
-  front, so with a Tilt Black this gives *Tilt Black Beer Temperature* (`sensor.tilt_black_beer_temperature`), next
-  to the Tilt's other entities. The default name *Stats* is hard to find among your temperature sensors.
-- Characteristic: *Average step* (`average_step`). It weighs each value by how long it lasted. A plain *Mean*
-  counts every state change once, so a burst of flickering readings skews it and long steady periods count too little.
+  front, so with a Tilt Black this gives *Tilt Black Beer Temperature* (`sensor.tilt_black_beer_temperature`).
+- Characteristic: *Average step* (`average_step`). It weighs each value by how long it lasted.
 - Max age: 30 minutes.
-- Keep last sample: on. The helper only gets a sample when the temperature changes, so without it a temperature that
-  holds steady for longer than the max age leaves the helper unknown, and the blueprint waits until it changes.
+- Keep last sample: on.
 
 Then select the helper as the blueprint's *Beer temperature*. If you leave it empty, the blueprint uses the
 Ferminator climate entity's current temperature as is.
@@ -123,43 +106,12 @@ Ferminator climate entity's current temperature as is.
 | Input | Default | Description |
 |---|---|---|
 | Ferminator | | The Ferminator's climate entity. |
-| Beer temperature | *(none)* | The smoothed beer temperature. Empty uses the climate entity's current temperature. |
+| Beer temperature | *(none)* | The smoothed temperature. Empty uses the climate entity's current temperature. |
 | Off threshold | 0.5 | Turn regulation off when the beer is at most this far from the target. |
 | On threshold | 1.0 | Turn regulation on when the beer is at least this far from the target. Must be larger than the off threshold. |
 | Minimum time between switches | 15 min | Leave regulation on or off for at least this long after it was last switched, by the blueprint or by hand. |
 
-Temperatures and thresholds are in your Home Assistant temperature unit. The defaults are meant for °C; with °F, use
-about 0.9 and 1.8 instead. If the on threshold isn't larger than the off threshold, the blueprint leaves
-regulation alone and logs a warning.
-
-The blueprint only turns regulation on and off; the Ferminator decides whether to heat or cool. The smoothing and
-the gap between the thresholds are what keep regulation from switching back and forth. The minimum time between
-switches is a backstop: it only limits how often regulation can switch when they don't. Without a smoothed
-temperature, for example, a standard Tilt's 0.56 °C steps are wider than the default gap, so a reading that jumps
-one step back and forth would switch regulation once per interval instead of at every reading. A switch held back is
-made once the time has passed, if it is still needed. Beer temperature changes slowly, so waiting costs little.
-
-### Caveats
-- The blueprint only acts while the Ferminator is online, so a Ferminator you have switched off after a batch is left
-  alone. While it is online, the blueprint overrides regulation you change by hand once the minimum time between
-  switches has passed: it turns it back on if you turned it off, and off again if you turned it on while the beer is
-  within the off threshold. Turn the automation off to change regulation by hand.
-- A hydrometer that stops reporting keeps its last reading in BrewCreator until the Ferminator's next hourly upload,
-  so for up to an hour the blueprint acts on a stale temperature. After that the hydrometer's sensors, and so the
-  *Beer temperature* helper, become unavailable. Once the helper has been unavailable for 2 minutes, the blueprint
-  turns regulation on, even within the minimum time between switches, and the Ferminator regulates on its built-in
-  probe.
-- The minimum time between switches is counted from the climate entity's last change of state, so it also starts
-  when the Ferminator comes back online and when Home Assistant starts.
-
-## Known issues
-### A Tilt colour selected on the Ferminator but not registered in BrewCreator
-If you select a Tilt colour in the Ferminator Connect's own menu that isn't registered in BrewCreator, its readings
-keep flowing, but BrewCreator logs them under the Tilt currently linked to the Ferminator. In Home Assistant they
-show up on that Tilt's device, whose model still shows the linked Tilt's colour, e.g. a Black Tilt's readings on a
-device with model *TiltOrange*.
-
-To fix it, register the Tilt in BrewCreator, then link it with the Ferminator's *Hydrometer* select.
+Temperatures and thresholds are in your Home Assistant temperature unit.
 
 ## Contributing
 Feel free to make an issue or a pull request.
