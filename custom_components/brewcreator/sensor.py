@@ -193,9 +193,8 @@ class BrewCreatorSensor(BrewCreatorEntity, SensorEntity):
 
 
 class BatchInfoSensor(BatchInfoEntity, BrewCreatorSensor):
-    """A field of the batch info of a Ferminator or an unlinked Graviator, unknown while it has no batch."""
+    """A field of the batch info of a Ferminator or an unlinked Graviator, unknown while it isn't set."""
 
     @property
     def native_value(self) -> Any:
-        batch_info = self._brewcreator_device.batch_info
-        return self.entity_description.value_fn(batch_info) if batch_info is not None else None
+        return self.entity_description.value_fn(self._brewcreator_device.batch_info)

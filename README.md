@@ -52,8 +52,8 @@ A Graviator that isn't linked to a Ferminator logs over Wi-Fi with a batch of it
 and the action accepts it too. While a Graviator is linked, BrewCreator gives it the Ferminator's batch info: its own
 batch sensors are unavailable then, and the batch is changed on the Ferminator.
 
-To clear fields so they have no value, list them in `clear`. Every field but the batch name and whether the brew
-is started can be cleared:
+To clear fields so they have no value, list them in `clear`. Every field but whether the brew is started can be
+cleared, such as the batch name between brews:
 
 ```yaml
 action: brewcreator.set_batch_info

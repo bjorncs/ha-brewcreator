@@ -88,6 +88,7 @@
         },
         "clearable_field": {
             "options": {
+                "batch_name": "Batch name",
                 "owner": "Owner",
                 "beer_style": "Beer style",
                 "original_gravity": "Original gravity",

@@ -55,10 +55,13 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 
 | Field | Clears with | Ignored | Stored as something else |
 |---|---|---|---|
-| `owner`, `beerStyle` | `""` | `null` | `0` → `"0"` |
+| `brewName`, `owner`, `beerStyle` | `""` | `null` | `0` → `"0"` |
 | `ebc`, `ibu`, `volume`, `og`, `fg` | `0` | `null`, `""` | |
 | `fermented` | `"None"` or `0` | `null`, `""` | |
 
+- Clearing `brewName` on the Ferminator (tested 2026-11-14, mid-brew) left `brewDate`, `isLoggingData` and the other
+  fields as they were, and also cleared the name of its linked hydrometer, but not the name of an unlinked one. The web
+  app still showed the brew as started, with no name. Setting the name again set it on the linked hydrometer too.
 - A hydrometer's `abv` is worked out from its own `og` and `sg` whenever it is read: 5.2224464 for og 1.058 and
   sg 1.018, i.e. ((og − sg) × 1.05 / sg) / 0.79 × 100. It is `0` while `og` is cleared, and comes back as soon as
   `og` is set again (tested on a linked Tilt). The Ferminator's own `abv` in `data2` is rounded to one decimal.

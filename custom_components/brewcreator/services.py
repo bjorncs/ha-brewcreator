@@ -32,8 +32,7 @@ ATTR_CLEAR = "clear"
 # The action's fields besides the device, of which at least one must be given
 BATCH_FIELDS = (*(f.key for f in BatchField), ATTR_CLEAR)
 
-# The fields the clear field can name. The batch name can't be cleared, as BrewCreator equipment without one has no
-# batch info.
+# The fields the clear field can name
 CLEARABLE_FIELDS = {f.key: f for f in BatchField if f.unset_value is not None}
 
 # The limits of BrewCreator's batch info form
@@ -146,8 +145,8 @@ def _validate_gravities(equipment: BrewCreatorEquipment, changes: Mapping[BatchF
     A gravity that isn't changed is taken from the current batch info, and one that is cleared isn't compared.
     """
     batch_info = equipment.batch_info
-    og = changes.get(BatchField.ORIGINAL_GRAVITY, batch_info.og if batch_info else None)
-    fg = changes.get(BatchField.FINAL_GRAVITY, batch_info.fg if batch_info else None)
+    og = changes.get(BatchField.ORIGINAL_GRAVITY, batch_info.og)
+    fg = changes.get(BatchField.FINAL_GRAVITY, batch_info.fg)
     if og is not None and fg is not None and fg >= og:
         raise ServiceValidationError(
             translation_domain=DOMAIN,

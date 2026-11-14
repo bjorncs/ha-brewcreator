@@ -254,6 +254,7 @@ class SetBatchInfoTestCase(IntentTestCase):
         self.assertEqual("array", clear["type"])
         self.assertEqual(
             [
+                "batch_name",
                 "owner",
                 "beer_style",
                 "original_gravity",

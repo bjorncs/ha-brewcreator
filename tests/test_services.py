@@ -100,8 +100,8 @@ class SetBatchInfoTestCase(unittest.TestCase):
         self.call(
             dr,
             [f],
-            batch_name="Easter Ale",
             clear=[
+                "batch_name",
                 "owner",
                 "beer_style",
                 "original_gravity",
@@ -115,7 +115,7 @@ class SetBatchInfoTestCase(unittest.TestCase):
         f._api._update_equipment_state.assert_awaited_once_with(
             "f",
             {
-                "brewName": "Easter Ale",
+                "brewName": "",
                 "owner": "",
                 "beerStyle": "",
                 "og": 0,
@@ -174,10 +174,10 @@ class SetBatchInfoTestCase(unittest.TestCase):
         self.call(dr, [f], final_gravity=1.060, clear=["original_gravity"])
         f._api._update_equipment_state.assert_awaited_once_with("f", {"fg": 1.060, "og": 0})
 
-    def test_without_batch_info_any_final_gravity_is_accepted(self, dr):
-        f = batch_ferminator(brewName=None)
-        self.call(dr, [f], final_gravity=1.010)
-        f._api._update_equipment_state.assert_awaited_once()
+    def test_gravities_are_compared_without_a_batch_name(self, dr):
+        f = batch_ferminator(brewName="")
+        with self.assertRaises(ServiceValidationError):
+            self.call(dr, [f], final_gravity=1.058)
 
     def test_hydrometer_is_refused(self, dr):
         with self.assertRaises(ServiceValidationError) as raised:
@@ -239,7 +239,7 @@ class SetBatchInfoSchemaTestCase(unittest.TestCase):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", field: value})
 
     def test_only_clearable_fields_can_be_cleared(self):
-        for field in ("batch_name", "started", "device_id"):
+        for field in ("started", "device_id"):
             with self.subTest(field=field), self.assertRaises(probatio.Invalid):
                 SET_BATCH_INFO_SCHEMA({"device_id": "d", "clear": [field]})
 

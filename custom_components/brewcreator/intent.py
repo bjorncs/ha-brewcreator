@@ -268,8 +268,6 @@ def _ferminator_status(ferminator: Ferminator) -> dict[str, Any]:
 
 def _batch_status(equipment: BrewCreatorEquipment) -> dict[str, Any]:
     batch = equipment.batch_info
-    if batch is None:
-        return {}
     status: dict[str, Any] = {
         "name": batch.brew_name,
         "beer_style": batch.beer_style,

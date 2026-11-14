@@ -90,8 +90,7 @@ class BatchField(Enum):
     json_key: str
     unset_value: str | int | None
 
-    # Equipment without a batch name has no batch info, so the name isn't cleared
-    BATCH_NAME = "brewName", None
+    BATCH_NAME = "brewName", ""
     OWNER = "owner", ""
     BEER_STYLE = "beerStyle", ""
     ORIGINAL_GRAVITY = "og", 0
@@ -226,10 +225,8 @@ class BrewCreatorEquipment(ABC):
         return self._json.get("isLoggingData")
 
     @property
-    def batch_info(self) -> BatchInfo | None:
-        if self._json.get("brewName"):
-            return BatchInfo(self._json)
-        return None
+    def batch_info(self) -> BatchInfo:
+        return BatchInfo(self._json)
 
     @property
     def json(self) -> dict[str, Any]:

@@ -72,11 +72,18 @@ class BatchValuesTestCase(unittest.TestCase):
         self.assertEqual("fermentation_type", entity.translation_key)
 
     def test_without_batch(self):
-        name, og, fg, started = self.entities(batch_ferminator(brewName=None, isLoggingData=False))
+        name, og, fg, started = self.entities(ferminator(isLoggingData=False))
         self.assertIsNone(name.native_value)
         self.assertIsNone(og.native_value)
         self.assertIsNone(fg.native_value)
         self.assertFalse(started.is_on)
+
+    def test_batch_info_without_a_batch_name(self):
+        # Clearing the name leaves the rest of the batch info, and BrewCreator keeps the brew started
+        name, og, _, started = self.entities(batch_ferminator(brewName=""))
+        self.assertIsNone(name.native_value)
+        self.assertEqual(1.058, og.native_value)
+        self.assertTrue(started.is_on)
 
     def test_unset_values_are_unknown(self):
         f = batch_ferminator(og=0, fg=0, owner="")

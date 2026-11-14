@@ -78,6 +78,7 @@ set_batch_info:
           translation_key: clearable_field
           multiple: true
           options:
+            - batch_name
             - owner
             - beer_style
             - original_gravity
