@@ -36,15 +36,8 @@ def device_info(equipment: BrewCreatorEquipment) -> DeviceInfo:
 
 
 def find_device(registry: DeviceRegistry, equipment_id: str, config_entry_id: str) -> DeviceEntry | None:
-    """Return the config entry's device of the equipment, if registered.
-
-    HA 2026.11 deprecated async_get_device, as identifiers are only unique within a config entry since 2026.8.
-    Older versions don't have async_get_device_by_identifier.
-    """
-    identifier = (DOMAIN, equipment_id)
-    if hasattr(registry, "async_get_device_by_identifier"):
-        return registry.async_get_device_by_identifier(identifier, config_entry_id)
-    return registry.async_get_device(identifiers={identifier})
+    """Return the config entry's device of the equipment, if registered."""
+    return registry.async_get_device_by_identifier((DOMAIN, equipment_id), config_entry_id)
 
 
 def equipment_ids(device: BaseDeviceEntry) -> set[str]:
