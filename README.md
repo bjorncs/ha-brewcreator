@@ -2,6 +2,7 @@
 [![CI](https://github.com/bjorncs/ha-brewcreator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bjorncs/ha-brewcreator/actions/workflows/ci.yml)
 
 Monitor and control your devices in [BrewCreator](https://brewcreator.com) such as
+[Brewolution](https://www.brewolution.com)'s
 [Fercubator Connect](https://www.brewolution.com/fermentation/fercubator-and-accessories/fercubator-connect-wifi-thermostat-controlled-fermentation)
 (previously named Ferminator Connect) through Home Assistant.
 
@@ -18,9 +19,9 @@ Or add it by hand: go to *Settings → Marketplace*, select *Add from link*, ent
 documentation.
 
 ## Supported devices
-- Fercubator Connect / Ferminator Connect
+- Brewolution Fercubator Connect / Ferminator Connect
 - Tilt hydrometer
-- Graviator hydrometer
+- Brewolution Graviator hydrometer
 
 Create your account at [brewcreator.com](https://brewcreator.com); everything else can be done from Home Assistant.
 
