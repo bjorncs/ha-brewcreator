@@ -1,6 +1,5 @@
 """Select entity for choosing the hydrometer linked to a Ferminator."""
 
-from collections import Counter
 from collections.abc import Mapping
 
 from homeassistant.components.select import SelectEntity
@@ -11,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import BrewCreatorEquipment, Ferminator, Hydrometer, linkable_hydrometers
 from .coordinator import BrewCreatorDataUpdateCoordinator
+from .device import unique_labels
 from .entity import FerminatorEntity, register_entities
 
 NO_HYDROMETER = "none"
@@ -21,11 +21,9 @@ def hydrometers_by_option(
 ) -> dict[str, Hydrometer]:
     """Return the hydrometers that can be linked to the Ferminator, by their option in the Hydrometer select.
 
-    An option is the hydrometer's name, with the start of its equipment ID when two share a name.
+    An option is the hydrometer's name, with the end of its equipment ID when two share a name.
     """
-    hydrometers = linkable_hydrometers(ferminator, equipment)
-    name_counts = Counter(h.name for h in hydrometers)
-    return {h.name if name_counts[h.name] == 1 else f"{h.name} ({h.id[:8]})": h for h in hydrometers}
+    return unique_labels(linkable_hydrometers(ferminator, equipment), lambda h: h.name)
 
 
 async def async_setup_entry(

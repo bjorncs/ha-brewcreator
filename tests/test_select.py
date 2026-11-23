@@ -58,13 +58,15 @@ class HydrometerSelectTestCase(unittest.TestCase):
         self.assertEqual({"options": ["none"]}, entity.capability_attributes)
 
     def test_duplicate_names_get_an_id_suffix(self):
+        # Registered close together, so their time-ordered IDs (UUIDv7) start alike: the suffix is the ID's end
+        first, second = "01a209b1-cbe6-75ea-84be-f8388a39f308", "01a209b1-ffff-7771-b846-7a5d9744b421"
         entity = setup(
-            ferminator("f", connected=["aaaaaaaa-1"]),
-            tilt("aaaaaaaa-1", name="Tilt"),
-            tilt("bbbbbbbb-2", name="Tilt"),
+            ferminator("f", connected=[first]),
+            tilt(first, name="Tilt"),
+            tilt(second, name="Tilt"),
         )
-        self.assertEqual(["none", "Tilt (aaaaaaaa)", "Tilt (bbbbbbbb)"], entity.options)
-        self.assertEqual("Tilt (aaaaaaaa)", entity.current_option)
+        self.assertEqual(["none", "Tilt (8a39f308)", "Tilt (9744b421)"], entity.options)
+        self.assertEqual("Tilt (8a39f308)", entity.current_option)
 
     def test_selecting_a_hydrometer_links_it(self):
         entity = setup(

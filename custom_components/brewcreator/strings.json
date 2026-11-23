@@ -17,6 +17,93 @@
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BrewCreator devices",
+        "description": "Add a device to your BrewCreator account, or remove one. You still need brewcreator.com to create the account.",
+        "menu_options": {
+          "add_device": "Add a device",
+          "remove_device": "Remove a device"
+        }
+      },
+      "add_device": {
+        "title": "Add a device",
+        "description": "Which kind of device do you want to add?",
+        "menu_options": {
+          "add_by_serial_number": "Ferminator or Graviator",
+          "add_tilt": "Tilt"
+        }
+      },
+      "add_by_serial_number": {
+        "title": "Add a Ferminator or Graviator",
+        "description": "Switch the device on and connect it to Wi-Fi first. Its serial number is printed with the QR code: on a Ferminator on the back of the cooling/heating unit, above the heat sink, and on a Graviator on the cylinder, opposite the logo.",
+        "data": {
+          "serial_number": "Serial number",
+          "name": "Name"
+        },
+        "data_description": {
+          "serial_number": "Letters and digits in the form AB12-CD3-EF4, with or without dashes.",
+          "name": "Optional. Defaults to the device type, and for a Graviator its colour, such as Graviator Red."
+        }
+      },
+      "graviator_color": {
+        "title": "Graviator colour",
+        "description": "The serial number is a Graviator. Which colour is it?",
+        "data": {
+          "color": "Colour"
+        },
+        "data_description": {
+          "color": "Only colours no other Graviator has are offered."
+        }
+      },
+      "add_tilt": {
+        "title": "Add a Tilt",
+        "description": "A Tilt has no serial number. It reports through a Ferminator: select its colour on the Ferminator, and link it with the Ferminator's Hydrometer select once it is added.",
+        "data": {
+          "color": "Colour",
+          "name": "Name"
+        },
+        "data_description": {
+          "color": "Only colours no other Tilt has are offered.",
+          "name": "Optional. Defaults to Tilt and the colour, such as Tilt Orange."
+        }
+      },
+      "remove_device": {
+        "title": "Remove a device",
+        "description": "Which device do you want to remove from your BrewCreator account?",
+        "data": {
+          "equipment": "Device"
+        }
+      },
+      "remove_confirm": {
+        "title": "Remove {name}?",
+        "description": "{name} ({type}) will be removed from your BrewCreator account, and its device and entities from Home Assistant. If it is linked, it is unlinked first. Its brew history in BrewCreator may be lost. To use it again, add it again."
+      }
+    },
+    "error": {
+      "invalid_serial_number": "Enter the serial number as printed, such as AB12-CD3-EF4.",
+      "already_in_account": "This device is already in your BrewCreator account.",
+      "serial_number_not_found": "BrewCreator doesn't know this serial number. Check it, and that the device is switched on and connected to Wi-Fi.",
+      "already_registered": "This device is already registered in BrewCreator, possibly in another account. Remove it there first.",
+      "name_too_long": "The name can be at most 128 characters.",
+      "cannot_add": "Failed to add the device: {error}",
+      "cannot_remove": "Failed to remove the device: {error}",
+      "select_device": "Choose the device to remove.",
+      "unsupported_type": "This serial number belongs to a {type}, which this integration doesn't support.",
+      "color_taken": "Another device has taken this colour meanwhile. Choose another one."
+    },
+    "abort": {
+      "not_loaded": "The BrewCreator integration isn't running. Fix its setup first, then try again.",
+      "no_free_tilt_color": "Every Tilt colour is already taken. Remove a Tilt first.",
+      "no_free_graviator_color": "Every Graviator colour is already taken. Remove a Graviator first.",
+      "no_devices": "There are no devices in your BrewCreator account.",
+      "device_added": "Added {name}. Its entities appear in a moment.",
+      "device_removed": "Removed {name} from BrewCreator and Home Assistant.",
+      "cannot_add": "Failed to add the device: {error}",
+      "already_removed": "The device is no longer in your BrewCreator account."
+    }
+  },
   "issues": {
     "unsupported_equipment": {
       "title": "Unsupported BrewCreator device: {type}",
@@ -97,6 +184,29 @@
         "ibu": "IBU",
         "volume": "Volume",
         "fermentation_type": "Fermentation type"
+      }
+    },
+    "tilt_color": {
+      "options": {
+        "red": "Red",
+        "green": "Green",
+        "black": "Black",
+        "purple": "Purple",
+        "orange": "Orange",
+        "blue": "Blue",
+        "yellow": "Yellow",
+        "pink": "Pink"
+      }
+    },
+    "graviator_color": {
+      "options": {
+        "red": "Red",
+        "blue": "Blue",
+        "green": "Green",
+        "pink": "Pink",
+        "yellow": "Yellow",
+        "teal": "Teal",
+        "white": "White"
       }
     }
   },

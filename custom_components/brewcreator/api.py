@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from time import monotonic
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionResetError
@@ -35,6 +35,9 @@ MAX_SPECIFIC_GRAVITY = 1.3
 # A measured temperature (°C) outside this range is not plausible for wort or a fermentation chamber
 MIN_TEMPERATURE = -20
 MAX_TEMPERATURE = 120
+
+# Unknown hydrometer colours already logged, so each is logged once
+_logged_unknown_colors: set[str] = set()
 
 # SignalR JSON protocol record separator, terminating every frame
 SIGNALR_RECORD_SEPARATOR = "\x1e"
@@ -59,7 +62,14 @@ class FerminatorMode(Enum):
     IDLE = "Idle"
 
 
-class TiltColor(Enum):
+class _KeyedEnum(Enum):
+    @property
+    def key(self) -> str:
+        """The lower case name, as the integration's actions, sensors and options flow name the member."""
+        return self.name.lower()
+
+
+class TiltColor(_KeyedEnum):
     ORANGE = "TiltOrange"
     YELLOW = "TiltYellow"
     GREEN = "TiltGreen"
@@ -70,17 +80,22 @@ class TiltColor(Enum):
     BLACK = "TiltBlack"
 
 
-class FermentationType(Enum):
+class GraviatorColor(_KeyedEnum):
+    RED = "Red"
+    BLUE = "Blue"
+    GREEN = "Green"
+    PINK = "Pink"
+    YELLOW = "Yellow"
+    TEAL = "Teal"
+    WHITE = "White"
+
+
+class FermentationType(_KeyedEnum):
     TOP = "Top"
     BOTTOM = "Bottom"
 
-    @property
-    def key(self) -> str:
-        """The lower case name, as the fermentation type sensor and set_batch_info action show it."""
-        return self.name.lower()
 
-
-class BatchField(Enum):
+class BatchField(_KeyedEnum):
     """A batch info field: its JSON key, and the value BrewCreator reports while it isn't set, or None if it can't be
     cleared.
 
@@ -104,11 +119,6 @@ class BatchField(Enum):
     def __init__(self, json_key: str, unset_value: str | int | None) -> None:
         self.json_key = json_key
         self.unset_value = unset_value
-
-    @property
-    def key(self) -> str:
-        """The lower case name, as the set_batch_info action names the field."""
-        return self.name.lower()
 
 
 class BatchInfo:
@@ -186,6 +196,43 @@ class BrewCreatorAuthError(BrewCreatorError):
     pass
 
 
+class BrewCreatorRequestError(BrewCreatorError):
+    """BrewCreator answered a request with an error status.
+
+    error_codes are the codes BrewCreator gives in the response's errors or message, such as
+    equipmentDoesNotExistOnIotHub, empty if it gave none.
+    """
+
+    def __init__(self, message: str, status: int, error_codes: list[str]) -> None:
+        super().__init__(message)
+        self.status = status
+        self.error_codes = error_codes
+        self._folded_codes = frozenset(c.casefold() for c in error_codes)
+
+    def has_code(self, *codes: str) -> bool:
+        """Whether BrewCreator gave any of these error codes, ignoring case."""
+        return any(c.casefold() in self._folded_codes for c in codes)
+
+
+def _require_success(json: dict[str, Any] | None, failure: str) -> dict[str, Any]:
+    """The response, raising BrewCreatorError with the failure if BrewCreator says it didn't succeed."""
+    if not (json or {}).get("succeeded"):
+        raise BrewCreatorError(failure)
+    assert json is not None
+    return json
+
+
+def _error_codes(body: Any) -> list[str]:
+    """The error codes of an error response: its errors if it has any, else its message."""
+    if not isinstance(body, dict):
+        return []
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        return [str(e) for e in errors]
+    message = body.get("message")
+    return [message] if isinstance(message, str) and message else []
+
+
 class BrewCreatorEquipment(ABC):
     def __init__(self, api: BrewCreatorAPI, json: dict[str, Any]) -> None:
         self._api = api
@@ -211,7 +258,17 @@ class BrewCreatorEquipment(ABC):
 
     @property
     def name(self) -> str:
-        return self._json["name"]
+        """The name, or a default one while it has none, as after registering it."""
+        return self._json.get("name") or self._default_name
+
+    @property
+    def _default_name(self) -> str:
+        return self.raw_type
+
+    @classmethod
+    def default_name(cls, color: TiltColor | GraviatorColor | None = None) -> str:
+        """The name BrewCreator's web app suggests, such as Ferminator or Tilt Orange."""
+        return cls.__name__ if color is None else f"{cls.__name__} {color.name.title()}"
 
     @property
     def last_activity_time(self) -> datetime | None:
@@ -259,14 +316,49 @@ class BrewCreatorEquipment(ABC):
             payload[field.json_key] = value
         await self._update_equipment(payload)
 
+    async def set_name_and_color(self, name: str, color: TiltColor | GraviatorColor | None = None) -> None:
+        """Set the name, and the colour if given, as the web app does after registering equipment."""
+        payload: dict[str, Any] = {"name": name}
+        if color is not None:
+            payload["color"] = color.value
+        await self._update_equipment(payload)
+
+    async def unlink(self) -> None:
+        """Remove the links between this equipment and other equipment, if it has any."""
+
     async def _update_equipment(self, json_payload: dict[str, Any]) -> None:
         await self._api._update_equipment_state(self.id, json_payload)
 
 
 class Hydrometer(BrewCreatorEquipment, ABC):
+    COLORS: ClassVar[type[TiltColor | GraviatorColor]]
+    """The colours this type of hydrometer can have."""
+
     def __init__(self, api: BrewCreatorAPI, json: dict[str, Any]) -> None:
         super().__init__(api, json)
         self._linked_ferminator: Ferminator | None = None
+
+    @property
+    def color(self) -> TiltColor | GraviatorColor | None:
+        """The colour, or None while it has none ("None"), as after registering it, or if it is unknown."""
+        value = self._json.get("color")
+        if value in (None, "None"):
+            return None
+        try:
+            return self.COLORS(value)
+        except ValueError:
+            if value not in _logged_unknown_colors:
+                _logged_unknown_colors.add(value)
+                _LOGGER.warning("Unknown %s colour '%s'", self.raw_type, value)
+            return None
+
+    @property
+    def _default_name(self) -> str:
+        return self.default_name(self.color)
+
+    async def unlink(self) -> None:
+        if self.linked_ferminator is not None:
+            await self.linked_ferminator.unlink_hydrometer(self)
 
     @property
     def linked_ferminator(self) -> Ferminator | None:
@@ -320,16 +412,16 @@ class Hydrometer(BrewCreatorEquipment, ABC):
 
 
 class Tilt(Hydrometer):
-    @property
-    def color(self) -> TiltColor:
-        return TiltColor(self._json["color"])
+    COLORS = TiltColor
 
 
 class Graviator(Hydrometer):
-    """Graviator hydrometer, reported like Tilt but without color.
+    """Graviator hydrometer, reported like a Tilt.
 
     Unlike a Tilt, it can also report over Wi-Fi without a Ferminator, and then has a batch of its own.
     """
+
+    COLORS = GraviatorColor
 
     @property
     def is_connected(self) -> bool:
@@ -454,6 +546,16 @@ class Ferminator(BrewCreatorEquipment):
         """
         await self._update_equipment({"connectedEquipments": [hydrometer.id] if hydrometer is not None else []})
 
+    async def unlink(self) -> None:
+        if self.linked_hydrometers:
+            await self.link_hydrometer(None)
+
+    async def unlink_hydrometer(self, hydrometer: Hydrometer) -> None:
+        """Unlink a hydrometer from this Ferminator, keeping any other linked ones."""
+        await self._update_equipment(
+            {"connectedEquipments": [i for i in self.connected_equipment_ids if i != hydrometer.id]}
+        )
+
     @property
     def active_hydrometer(self) -> Hydrometer | None:
         """The first linked hydrometer with a valid reading, which the Ferminator regulates on."""
@@ -479,6 +581,9 @@ type EquipmentTypes = type[BrewCreatorEquipment] | tuple[type[BrewCreatorEquipme
 
 SUPPORTED_EQUIPMENT = (Ferminator, Hydrometer)
 """The equipment this integration has entities for."""
+
+TILT_IOT_HUB_ID = "Tilt"
+"""What register_equipment takes in place of a serial number to add a Tilt, which has none."""
 
 BATCH_INFO_EQUIPMENT = (Ferminator, Graviator)
 """The equipment that can have a batch of its own: a Ferminator, or a Graviator logging over Wi-Fi."""
@@ -623,11 +728,42 @@ class BrewCreatorAPI:
                 await self.__websocket_task
             self.__websocket_task = None
 
+    async def register_equipment(self, iot_hub_id: str) -> BrewCreatorEquipment:
+        """Add equipment to the account by its serial number, or a new Tilt with TILT_IOT_HUB_ID.
+
+        BrewCreator works out the type from the serial number, and the new equipment has no name. Raises
+        BrewCreatorRequestError with the code equipmentDoesNotExistOnIotHub for an unknown serial number. Not retried,
+        as a retry could add a second Tilt.
+        """
+        json = await self.__do_authenticated_request(
+            "POST", "/api/v1.0/equipments", {"iotHubId": iot_hub_id}, retry_server_errors=False
+        )
+        data = _require_success(json, f"BrewCreator rejected registering {iot_hub_id}").get("data")
+        if not isinstance(data, dict):
+            raise BrewCreatorError(f"BrewCreator returned no equipment registering {iot_hub_id}")
+        _LOGGER.debug("Registered equipment: %s", data)
+        return self.__get_equipment_from_json(data)
+
+    async def unregister_equipment(self, equipment_id: str) -> None:
+        """Remove equipment from the account. Equipment that is already gone counts as removed.
+
+        Not retried, as BrewCreator answers removing equipment that is already gone with status 500.
+        """
+        try:
+            json = await self.__do_authenticated_request(
+                "DELETE", f"/api/v1.0/equipments/{equipment_id}", retry_server_errors=False
+            )
+        except BrewCreatorRequestError as err:
+            if not err.has_code("equipmentDoesNotExist"):
+                raise
+            _LOGGER.debug("Equipment %s was already removed", equipment_id)
+            return
+        _require_success(json, f"BrewCreator rejected removing {equipment_id}")
+
     async def _update_equipment_state(self, equipment_id: str, json_payload: dict[str, Any]) -> None:
         """Update equipment, raising BrewCreatorError if BrewCreator rejects the update."""
         json = await self.__do_authenticated_request("PUT", f"/api/v1.0/equipments/{equipment_id}", json_payload)
-        if not (json or {}).get("succeeded"):
-            raise BrewCreatorError(f"BrewCreator rejected the update of {equipment_id}")
+        _require_success(json, f"BrewCreator rejected the update of {equipment_id}")
 
     def __get_equipment_from_json(self, equipment: dict[str, Any]) -> BrewCreatorEquipment:
         value = equipment["iotHubBrewEquipmentGroupId"]
@@ -758,8 +894,13 @@ class BrewCreatorAPI:
                 return
 
     async def __do_authenticated_request(
-        self, method: str, path: str, json: dict[str, Any] | None = None
+        self, method: str, path: str, json: dict[str, Any] | None = None, *, retry_server_errors: bool = True
     ) -> dict[str, Any] | None:
+        """Send a request, retrying on an expired token, and on status 500 if retry_server_errors.
+
+        An error status raises BrewCreatorRequestError. BrewCreator also answers some client errors with 500, such as
+        removing equipment that is already gone.
+        """
         max_attempts = 5
         sleep_seconds_between_attempts = 1
         for attempt in range(max_attempts):
@@ -777,11 +918,16 @@ class BrewCreatorAPI:
                 ) as response:
                     if response.status == 401:
                         raise BrewCreatorAuthError(f"Failed to {method} {path}: {response.status}")
-                    if response.status == 500:
+                    if response.status == 500 and retry_server_errors:
                         _LOGGER.info("Failed to %s %s: %s", method, path, response.status)
                         continue
                     if response.status != 200:
-                        raise BrewCreatorError(f"Failed to {method} {path}: {response.status}")
+                        error_codes = _error_codes(await self.__json_or_none(response))
+                        raise BrewCreatorRequestError(
+                            f"Failed to {method} {path}: {response.status} {', '.join(error_codes)}".rstrip(),
+                            response.status,
+                            error_codes,
+                        )
                     return await response.json() if response.content else None
             except BrewCreatorAuthError as e:
                 _LOGGER.info(
@@ -801,6 +947,14 @@ class BrewCreatorAPI:
                 raise BrewCreatorError(f"Failed to {method} {path}: {type(e).__name__}: {e}") from e
             await asyncio.sleep(sleep_seconds_between_attempts)
         raise BrewCreatorError(f"Failed to {method} {path} after {max_attempts} attempts")
+
+    @staticmethod
+    async def __json_or_none(response: aiohttp.ClientResponse) -> Any:
+        """The response's JSON body, or None if it has none or it can't be parsed."""
+        try:
+            return await response.json(content_type=None)
+        except ValueError, aiohttp.ClientError:
+            return None
 
     async def __update_access_token_if_invalid(self):
         if not self.__initial_token_load_completed:

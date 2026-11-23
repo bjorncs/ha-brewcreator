@@ -22,10 +22,17 @@ documentation.
 - Tilt hydrometer
 - Graviator hydrometer
 
-**Register every device in BrewCreator first**, including each Tilt colour you use. Registered devices appear in
-Home Assistant automatically, and one account can have several hydrometers. If you select a Tilt colour in the
-Ferminator Connect's own menu that isn't registered, BrewCreator logs its readings under the Tilt already linked
-to the Ferminator.
+Create your account at [brewcreator.com](https://brewcreator.com); everything else can be done from Home Assistant.
+
+**Register every device in BrewCreator**, including each Tilt colour you use. To add or remove one, go to the
+integration and select *Configure*. A Ferminator or Graviator is added by the serial number printed with its QR code,
+and must be switched on and connected to Wi-Fi; a Tilt is added by its colour. Devices registered in the web app
+appear in Home Assistant automatically too, and one account can have several hydrometers. If you select a Tilt
+colour in the Ferminator Connect's own menu that isn't registered, BrewCreator logs its readings under the Tilt
+already linked to the Ferminator.
+
+Removing a device removes it from your BrewCreator account, and its device and entities from Home Assistant. It is
+unlinked first if it is linked.
 
 A Ferminator's Hydrometer select changes which Tilt or Graviator is linked to it, like Connect Device in the
 BrewCreator web app.

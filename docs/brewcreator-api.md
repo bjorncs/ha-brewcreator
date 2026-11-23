@@ -46,6 +46,50 @@ Observed behaviour of the BrewCreator cloud API (`api.brewcreator.com`) and its 
 - Stopping the brew clears `brewDate` only on the Ferminator and the currently linked hydrometer.
 - Linking a hydrometer that is linked elsewhere fails with "Equipment Has Already Been Connected" (web app text).
 
+## Adding and removing equipment
+
+The API publishes its spec at `https://api.brewcreator.com/swagger/v1/swagger.json`.
+
+**Adding** takes two calls, as the web app's Add Device dialog makes them:
+
+1. `POST /api/v1.0/equipments` with `{"iotHubId": "<serial>"}` (`Equipments_RegisterEquipment`). The server works
+   out the type and returns the new equipment as a single object in `data`, although the spec says a collection.
+   - Ferminator and Graviator: the serial printed with the QR code, entered in the web app with the mask
+     `AAAA-AAA-AAA`.
+   - Tilt: the literal `"Tilt"`, case-insensitive (`"tilt"` worked too). Every call creates a new Tilt, with a random
+     6-character `iotHubBrewEquipmentId`, `color: "None"`, `name: null`, `og: 1` and `fg: 0.9`.
+   - The web app also sends `name`, `owner`, `color` and an empty `iotHubBrewEquipmentGroupId`; the server ignores
+     them.
+2. `PUT /api/v1.0/equipments/<id>` with `name` and `owner`, and for a Graviator or Tilt a `color`. The web app
+   requires all of them (name and owner up to 128 characters, owner defaulting to the user's full name) and only
+   offers colours that no other equipment of the same type has.
+
+The server checks none of that: a `color` already used by another Tilt (`TiltBlack`) and a Graviator colour on a
+Tilt (`Teal`) were both stored with 200. Colours by type: Graviator `Red`, `Blue`, `Green`, `Pink`, `Yellow`,
+`Teal`, `White`; Tilt `TiltRed`, `TiltGreen`, `TiltBlack`, `TiltPurple`, `TiltOrange`, `TiltBlue`, `TiltYellow`,
+`TiltPink`.
+
+Cancelling the dialog after step 1 deletes the new equipment again.
+
+**Removing** is `DELETE /api/v1.0/equipments/<id>` (`Equipments_UnregisterEquipment`), after a confirmation dialog.
+It returned 200 with `data: true`, and the equipment was gone from the list at once.
+
+| Case | Response |
+|---|---|
+| Unknown serial (`ZZZZ-ZZZ-ZZZ`, `hello world`), or a Tilt's random ID | 400, `errors: ["equipmentDoesNotExistOnIotHub"]` |
+| Empty `iotHubId` | 500, message "The parameter deviceId cannot be null, empty or whitespace." |
+| `DELETE` of equipment already removed | 500, message `equipmentDoesNotExist` |
+| `GET` of equipment already removed | 400, `errors: ["equipmentDoesNotExist"]` |
+
+The web app's translations also have `EquipmentHaveAlreadyRegistered` ("Equipment have already registered"),
+`incorrect_serial_number` and `User has not found`, presumably for registering a serial that is already in an account.
+
+Not tested, to leave the user's Ferminator alone:
+- Registering a Ferminator or Graviator, and a serial that is already registered (in this or another account).
+- Removing equipment that is linked: whether the other side's `connectedEquipments`/`equipmentId` is cleared, and
+  what happens to the brew log.
+- Whether a removed Ferminator or Graviator keeps its history if registered again.
+
 ## Batch info (tested 2026-11-12 on an unlinked Tilt)
 
 - A partial `PUT /api/v1.0/equipments/<id>` changes only the fields it carries; a field sent as `null` is left as it

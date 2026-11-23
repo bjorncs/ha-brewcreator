@@ -172,6 +172,32 @@ class BrewCreatorDataUpdateCoordinator(DataUpdateCoordinator[BrewCreatorData]):
             ) from err
         await self.async_refresh()
 
+    async def async_register_equipment(self, iot_hub_id: str) -> BrewCreatorEquipment:
+        """Add equipment to the BrewCreator account, see BrewCreatorAPI.register_equipment.
+
+        Not refreshed, so its entities are only added once it has been named.
+        """
+        return await self._api.register_equipment(iot_hub_id)
+
+    async def async_unregister_equipment(self, equipment: BrewCreatorEquipment) -> None:
+        """Remove equipment from the BrewCreator account, then its device from Home Assistant.
+
+        Its links are removed first, so no Ferminator or hydrometer is left linked to equipment that is gone. That is
+        best effort, as it's unknown whether BrewCreator removes them itself.
+        """
+        try:
+            await equipment.unlink()
+        except BrewCreatorError as err:
+            _LOGGER.warning("Failed to unlink %s before removing it, removing it anyway: %s", equipment.name, err)
+        await self._api.unregister_equipment(equipment.id)
+        _LOGGER.info("Removed %s from BrewCreator", equipment.name)
+        device_registry = dr.async_get(self.hass)
+        device = find_device(device_registry, equipment.id, self.config_entry.entry_id)
+        if device is not None:
+            device_registry.async_remove_device(device.id)
+        self.async_forget_equipment({equipment.id})
+        await self.async_refresh()
+
     @callback
     def _async_refresh_finished(self) -> None:
         """Sync devices, entities and issues with the equipment list after every refresh.

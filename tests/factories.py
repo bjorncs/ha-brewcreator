@@ -45,6 +45,21 @@ BATCH = {
 """Batch info fields of equipment JSON, for a started brew."""
 
 
+def bare_coordinator() -> BrewCreatorDataUpdateCoordinator:
+    """A real coordinator without Home Assistant behind it, with no data and a mocked API."""
+    coordinator = object.__new__(BrewCreatorDataUpdateCoordinator)
+    coordinator.hass = MagicMock()
+    coordinator.config_entry = SimpleNamespace(entry_id="entry")
+    coordinator.data = None
+    coordinator.last_update_success = True
+    coordinator._equipment_listeners = {}
+    coordinator._unsupported_issue_ids = set()
+    coordinator._disconnect_refresh_unsub = None
+    coordinator._inactive_since = {}
+    coordinator._api = MagicMock(close=AsyncMock())
+    return coordinator
+
+
 def coordinator(*equipment: BrewCreatorEquipment, last_update_success: bool = True) -> MagicMock:
     """A coordinator holding the equipment with links resolved, as of a refresh that succeeded unless told otherwise.
 
@@ -68,11 +83,15 @@ def sensor(coordinator: MagicMock, id: str, key: str, *, batch_info: bool = Fals
     return BrewCreatorSensor(coordinator, id, next(d for d in descriptions if d.key == key))
 
 
-def equipment(id: str, type: str, name: str | None = None, connected: list[str] = (), **extra) -> dict:
-    """Equipment JSON as returned by BrewCreator's equipment list."""
+_TYPE_AND_ID = object()
+"""The default equipment name: its type and ID."""
+
+
+def equipment(id: str, type: str, name: str | None | object = _TYPE_AND_ID, connected: list[str] = (), **extra) -> dict:
+    """Equipment JSON as returned by BrewCreator's equipment list. A name of None is kept, as after registering."""
     return {
         "id": id,
-        "name": name or f"{type} {id}",
+        "name": f"{type} {id}" if name is _TYPE_AND_ID else name,
         "iotHubBrewEquipmentGroupId": type,
         "iotHubBrewEquipmentId": f"serial-{id}",
         "connectedEquipments": list(connected),
@@ -146,6 +165,28 @@ def tilt(id: str = "t", **kwargs) -> Tilt:
 
 def graviator(id: str = "g", **kwargs) -> Graviator:
     return hydrometer(Graviator, id, **kwargs)
+
+
+# A Tilt as BrewCreator returns it straight after registering it, as observed on 23 Nov 2026
+REGISTERED_TILT = {
+    "id": "01a209b1-cbe6-75ea-84be-f8388a39f308",
+    "iotHubBrewEquipmentGroupId": "Tilt",
+    "iotHubBrewEquipmentId": "lliilv",
+    "name": None,
+    "color": "None",
+    "connectedEquipments": [],
+    "equipmentId": None,
+    "og": 1,
+    "fg": 0.9,
+    "sg": None,
+    "actualTemperature": None,
+    "lastActivityTime": None,
+}
+
+
+def registered_tilt(**extra) -> Tilt:
+    """A Tilt straight after registering it: no name, and the colour "None"."""
+    return Tilt(MagicMock(), {**REGISTERED_TILT, **extra})
 
 
 def unsupported(id: str = "p", type: str = "Plaato") -> UnsupportedEquipment:
