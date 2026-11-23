@@ -1,8 +1,6 @@
 """Adding and removing equipment: the API calls, the coordinator, and the options flow."""
 
-import contextlib
 import unittest
-from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +9,6 @@ from homeassistant.data_entry_flow import FlowResultType
 
 from custom_components.brewcreator.api import (
     TILT_IOT_HUB_ID,
-    BrewCreatorAPI,
     BrewCreatorError,
     BrewCreatorRequestError,
     Ferminator,
@@ -31,6 +28,7 @@ from custom_components.brewcreator.config_flow import (
 from custom_components.brewcreator.device import device_info
 from tests.factories import (
     REGISTERED_TILT,
+    api_answering,
     bare_coordinator,
     coordinator,
     equipment,
@@ -38,35 +36,9 @@ from tests.factories import (
     graviator,
     ha_device,
     registered_tilt,
+    response,
     tilt,
 )
-
-
-class TokenStorage:
-    async def load_tokens(self):
-        return "token", "refresh", datetime.now() + timedelta(hours=1)
-
-    async def save_tokens(self, *tokens):
-        pass
-
-
-def response(status: int, body: dict | None) -> MagicMock:
-    resp = MagicMock(status=status, content=body is not None)
-    resp.json = AsyncMock(return_value=body)
-    return resp
-
-
-def api_answering(*responses: MagicMock) -> tuple[BrewCreatorAPI, MagicMock]:
-    """An API whose requests get the responses in turn, and the session's request mock."""
-    session = MagicMock()
-    answers = iter(responses)
-
-    @contextlib.asynccontextmanager
-    async def request(*args, **kwargs):
-        yield next(answers)
-
-    session.request = MagicMock(side_effect=request)
-    return BrewCreatorAPI("user", "secret", TokenStorage(), session), session.request
 
 
 def registered(cls, id: str = "new"):

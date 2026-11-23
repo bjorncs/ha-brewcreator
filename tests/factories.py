@@ -1,6 +1,8 @@
 """Builders for BrewCreator equipment and Home Assistant registry entries used across the tests."""
 
+import contextlib
 import json
+from datetime import datetime, timedelta
 from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -9,6 +11,7 @@ import probatio
 from homeassistant.helpers import intent, llm
 
 from custom_components.brewcreator.api import (
+    BrewCreatorAPI,
     BrewCreatorEquipment,
     Ferminator,
     Graviator,
@@ -43,6 +46,41 @@ BATCH = {
     "isLoggingData": True,
 }
 """Batch info fields of equipment JSON, for a started brew."""
+
+
+class ValidTokenStorage:
+    """Token storage holding a token that is valid for another hour, so requests are sent without signing in."""
+
+    async def load_tokens(self):
+        return "token", "refresh", datetime.now() + timedelta(hours=1)
+
+    async def save_tokens(self, *tokens):
+        pass
+
+
+def authenticated_api(session: MagicMock) -> BrewCreatorAPI:
+    """An API that is signed in, sending its requests through the session."""
+    return BrewCreatorAPI("user", "secret", ValidTokenStorage(), session)
+
+
+def response(status: int, body: dict | None) -> MagicMock:
+    """An HTTP response with the status and JSON body."""
+    resp = MagicMock(status=status, content=body is not None)
+    resp.json = AsyncMock(return_value=body)
+    return resp
+
+
+def api_answering(*responses: MagicMock) -> tuple[BrewCreatorAPI, MagicMock]:
+    """A signed-in API whose requests get the responses in turn, and the session's request mock."""
+    session = MagicMock()
+    answers = iter(responses)
+
+    @contextlib.asynccontextmanager
+    async def request(*args, **kwargs):
+        yield next(answers)
+
+    session.request = MagicMock(side_effect=request)
+    return authenticated_api(session), session.request
 
 
 def bare_coordinator() -> BrewCreatorDataUpdateCoordinator:

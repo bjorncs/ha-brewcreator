@@ -1,5 +1,5 @@
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
@@ -12,7 +12,7 @@ from custom_components.brewcreator.api import (
     Ferminator,
     parse_signalr_frames,
 )
-from tests.factories import ferminator, tilt
+from tests.factories import authenticated_api, ferminator, tilt
 
 
 class UpdateEquipmentStateTestCase(unittest.IsolatedAsyncioTestCase):
@@ -34,28 +34,17 @@ class TransportErrorTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_transport_errors_are_raised_as_brewcreator_errors(self):
         for error in (aiohttp.ClientConnectionError("refused"), TimeoutError()):
             with self.subTest(error=error):
-                session = MagicMock()
-                session.request.side_effect = error
-                api = BrewCreatorAPI("user", "pass", MagicMock(), session)
-                api._BrewCreatorAPI__initial_token_load_completed = True
-                api._BrewCreatorAPI__access_token = "token"
-                api._BrewCreatorAPI__expire_time = datetime.now() + timedelta(hours=1)
                 with self.assertRaises(BrewCreatorError) as raised:
-                    await api.equipment_json()
+                    await authenticated_api(MagicMock(request=MagicMock(side_effect=error))).equipment_json()
                 self.assertIs(error, raised.exception.__cause__)
 
     async def test_access_token_is_left_out_of_the_error(self):
         request_info = aiohttp.RequestInfo(
             URL("https://api.brewcreator.com/x"), "GET", CIMultiDictProxy(CIMultiDict(Authorization="Bearer token"))
         )
-        session = MagicMock()
-        session.request.side_effect = aiohttp.ContentTypeError(request_info, (), message="not JSON")
-        api = BrewCreatorAPI("user", "pass", MagicMock(), session)
-        api._BrewCreatorAPI__initial_token_load_completed = True
-        api._BrewCreatorAPI__access_token = "token"
-        api._BrewCreatorAPI__expire_time = datetime.now() + timedelta(hours=1)
+        error = aiohttp.ContentTypeError(request_info, (), message="not JSON")
         with self.assertRaises(BrewCreatorError) as raised:
-            await api.equipment_json()
+            await authenticated_api(MagicMock(request=MagicMock(side_effect=error))).equipment_json()
         self.assertIn("ContentTypeError", str(raised.exception))
         self.assertNotIn("Bearer", str(raised.exception))
 
